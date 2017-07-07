@@ -28,13 +28,16 @@ IF[{- !$disabled{"engine"} -}]
       INCLUDE[afalg]= ../include
     ENDIF
 
-    ENGINES_NO_INST=ossltest dasync
+    ENGINES_NO_INST=ossltest dasync altera_stub
     SOURCE[dasync]=e_dasync.c
     DEPEND[dasync]=../libcrypto
     INCLUDE[dasync]=../include
     SOURCE[ossltest]=e_ossltest.c
     DEPEND[ossltest]=../libcrypto
     INCLUDE[ossltest]=../include
+    SOURCE[altera_stub]=e_altera_stub.c
+    DEPEND[altera_stub]=../libcrypto
+    INCLUDE[altera_stub]=../include
   ENDIF
 
   GENERATE[e_padlock-x86.s]=asm/e_padlock-x86.pl $(PERLASM_SCHEME) $(CFLAGS) $(LIB_CFLAGS) $(PROCESSOR)
