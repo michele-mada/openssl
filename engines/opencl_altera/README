@@ -1,0 +1,4 @@
+copy (or symlink) here the following files/folders:
+
+opencl-ciphers-improved/bin/release/libopencl_ciphers.so
+opencl-ciphers-improved/bin/release/include

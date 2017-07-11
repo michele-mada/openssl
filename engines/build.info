@@ -35,8 +35,9 @@ IF[{- !$disabled{"engine"} -}]
     SOURCE[ossltest]=e_ossltest.c
     DEPEND[ossltest]=../libcrypto
     INCLUDE[ossltest]=../include
+
     SOURCE[altera_stub]=e_altera_stub.c
-    DEPEND[altera_stub]=../libcrypto
+    DEPEND[altera_stub]=../libcrypto ./opencl_altera/libopencl_ciphers
     INCLUDE[altera_stub]=../include
   ENDIF
 
