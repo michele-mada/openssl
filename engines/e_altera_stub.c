@@ -33,7 +33,14 @@ static int altera_stub_cipher_nids[] = {
 
 /* setup DES */
 int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key, const unsigned char *iv, int enc);
-int altera_stub_des_ecb_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in, size_t inl);
+int altera_stub_des_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in, size_t inl);
+
+typedef struct {
+    des_context k;
+    union {
+        void (*cipher) (OpenCL_ENV* env, uint8_t *in, size_t input_size, des_context* K, uint8_t *out);
+    } stream;
+} EVP_OPENCL_DES_KEY;
 
 static EVP_CIPHER *_hidden_des_ecb = NULL;
 static const EVP_CIPHER *altera_stub_des_ecb(void)
@@ -49,7 +56,7 @@ static const EVP_CIPHER *altera_stub_des_ecb(void)
             || !EVP_CIPHER_meth_set_init(_hidden_des_ecb,
                                          altera_stub_des_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_des_ecb,
-                                              altera_stub_des_ecb_cipher)
+                                              altera_stub_des_cipher)
             || !EVP_CIPHER_meth_set_impl_ctx_size(_hidden_des_ecb,
                                                   EVP_CIPHER_impl_ctx_size(EVP_des_ecb())))) {
         EVP_CIPHER_meth_free(_hidden_des_ecb);
@@ -170,18 +177,30 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
                              const unsigned char *iv, int enc)
 {
     int mode = EVP_CIPHER_CTX_mode(ctx);
+
+    // initialize the cipher data memory if needed
+    if (sizeof(EVP_CIPHER_CTX_get_cipher_data(ctx)) < sizeof(EVP_OPENCL_DES_KEY)) {
+        OPENSSL_free(EVP_CIPHER_CTX_get_cipher_data(ctx));
+        EVP_CIPHER_CTX_set_cipher_data(ctx, malloc(sizeof(EVP_OPENCL_DES_KEY)));
+    }
+
+    EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
+    // key schedule
     opencl_des_set_encrypt_key(
         key,
         EVP_CIPHER_CTX_key_length(ctx),
-        EVP_CIPHER_CTX_get_cipher_data(ctx));
+        &data->k);
+
+    //TODO: handle mode flags
+    data->stream.cipher = enc ? opencl_des_ecb_encrypt : opencl_des_ecb_decrypt;
+
     return 1;
 }
 
-int altera_stub_des_ecb_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
+int altera_stub_des_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                                const unsigned char *in, size_t inl)
 {
-    des_context *K = EVP_CIPHER_CTX_get_cipher_data(ctx);
-    opencl_des_ecb_encrypt(global_env, in, inl, K, out);
-
+    EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
+    (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
     return 1;
 }
