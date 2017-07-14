@@ -58,7 +58,8 @@ static const EVP_CIPHER *altera_stub_des_ecb(void)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_des_ecb,
                                               altera_stub_des_cipher)
             || !EVP_CIPHER_meth_set_impl_ctx_size(_hidden_des_ecb,
-                                                  EVP_CIPHER_impl_ctx_size(EVP_des_ecb())))) {
+                                                  sizeof(EVP_OPENCL_DES_KEY))
+                                              )) {
         EVP_CIPHER_meth_free(_hidden_des_ecb);
         _hidden_des_ecb = NULL;
     }
@@ -178,12 +179,6 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
 {
     int mode = EVP_CIPHER_CTX_mode(ctx);
 
-    // initialize the cipher data memory if needed
-    if (sizeof(EVP_CIPHER_CTX_get_cipher_data(ctx)) < sizeof(EVP_OPENCL_DES_KEY)) {
-        OPENSSL_free(EVP_CIPHER_CTX_get_cipher_data(ctx));
-        EVP_CIPHER_CTX_set_cipher_data(ctx, malloc(sizeof(EVP_OPENCL_DES_KEY)));
-    }
-
     EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
     // key schedule
     opencl_des_set_encrypt_key(
@@ -191,8 +186,14 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
         EVP_CIPHER_CTX_key_length(ctx),
         &data->k);
 
-    //TODO: handle mode flags
-    data->stream.cipher = enc ? opencl_des_ecb_encrypt : opencl_des_ecb_decrypt;
+    if (mode & EVP_CIPH_ECB_MODE) {
+        data->stream.cipher = enc ? opencl_des_ecb_encrypt : opencl_des_ecb_decrypt;
+    }
+
+
+    else {
+        return 0;
+    }
 
     return 1;
 }
@@ -201,6 +202,7 @@ int altera_stub_des_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                                const unsigned char *in, size_t inl)
 {
     EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
+    //printf("Block size %ld\n", inl);
     (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
-    return 1;
+    return inl;
 }
