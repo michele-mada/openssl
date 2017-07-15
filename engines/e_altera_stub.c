@@ -203,7 +203,7 @@ int altera_stub_des_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                                const unsigned char *in, size_t inl)
 {
     EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-    printf("Block size %ld\n", inl);
+    //printf("Block size %ld\n", inl);
     (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
     return inl;
 }
