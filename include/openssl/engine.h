@@ -210,6 +210,12 @@ extern "C" {
  * engine-specific ctrl command expects.
  */
 # define ENGINE_CTRL_GET_CMD_FLAGS               18
+/*
+ * Returns a size_t with a custom the engine's custom ENC_BLOCK_SIZE.
+ * If the value is zero, the engine will use the open hardcoded in 
+ * crypto/evp/bio_enc.c
+ */
+# define ENGINE_CTRL_GET_ENC_BLOCK_SIZE          19
 
 /*
  * ENGINE implementations should start the numbering of their own control
@@ -472,6 +478,7 @@ int ENGINE_set_DSA(ENGINE *e, const DSA_METHOD *dsa_meth);
 int ENGINE_set_EC(ENGINE *e, const EC_KEY_METHOD *ecdsa_meth);
 int ENGINE_set_DH(ENGINE *e, const DH_METHOD *dh_meth);
 int ENGINE_set_RAND(ENGINE *e, const RAND_METHOD *rand_meth);
+int ENGINE_set_enc_block_size(ENGINE *e, size_t block_size);
 int ENGINE_set_destroy_function(ENGINE *e, ENGINE_GEN_INT_FUNC_PTR destroy_f);
 int ENGINE_set_init_function(ENGINE *e, ENGINE_GEN_INT_FUNC_PTR init_f);
 int ENGINE_set_finish_function(ENGINE *e, ENGINE_GEN_INT_FUNC_PTR finish_f);
@@ -515,6 +522,7 @@ const DSA_METHOD *ENGINE_get_DSA(const ENGINE *e);
 const EC_KEY_METHOD *ENGINE_get_EC(const ENGINE *e);
 const DH_METHOD *ENGINE_get_DH(const ENGINE *e);
 const RAND_METHOD *ENGINE_get_RAND(const ENGINE *e);
+size_t ENGINE_get_enc_block_size(const ENGINE *e);
 ENGINE_GEN_INT_FUNC_PTR ENGINE_get_destroy_function(const ENGINE *e);
 ENGINE_GEN_INT_FUNC_PTR ENGINE_get_init_function(const ENGINE *e);
 ENGINE_GEN_INT_FUNC_PTR ENGINE_get_finish_function(const ENGINE *e);

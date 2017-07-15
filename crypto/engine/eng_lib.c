@@ -242,6 +242,12 @@ int ENGINE_set_cmd_defns(ENGINE *e, const ENGINE_CMD_DEFN *defns)
     return 1;
 }
 
+int ENGINE_set_enc_block_size(ENGINE *e, size_t block_size)
+{
+    e->enc_block_size = block_size;
+    return 1;
+}
+
 const char *ENGINE_get_id(const ENGINE *e)
 {
     return e->id;
@@ -280,6 +286,11 @@ int ENGINE_get_flags(const ENGINE *e)
 const ENGINE_CMD_DEFN *ENGINE_get_cmd_defns(const ENGINE *e)
 {
     return e->cmd_defns;
+}
+
+size_t ENGINE_get_enc_block_size(const ENGINE *e)
+{
+    return e->enc_block_size;
 }
 
 /*

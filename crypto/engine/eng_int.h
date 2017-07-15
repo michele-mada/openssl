@@ -134,6 +134,8 @@ struct engine_st {
     const DH_METHOD *dh_meth;
     const EC_KEY_METHOD *ec_meth;
     const RAND_METHOD *rand_meth;
+    /* Overrides the value hardcoded in crypto/evp/bio_enc.c */
+    size_t enc_block_size;
     /* Cipher handling is via this callback */
     ENGINE_CIPHERS_PTR ciphers;
     /* Digest handling is via this callback */

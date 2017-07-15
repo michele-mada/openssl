@@ -76,6 +76,7 @@ static int bind_altera_stub(ENGINE *e)
 
     if (!ENGINE_set_id(e, engine_altera_stub_id)
         || !ENGINE_set_name(e, engine_altera_stub_name)
+        || !ENGINE_set_enc_block_size(e, 8192)  //TODO: test value here
         //|| !ENGINE_set_digests(e, ossltest_digests)
         || !ENGINE_set_ciphers(e, altera_stub_ciphers)
         || !ENGINE_set_destroy_function(e, altera_stub_destroy)
@@ -202,7 +203,7 @@ int altera_stub_des_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                                const unsigned char *in, size_t inl)
 {
     EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-    //printf("Block size %ld\n", inl);
+    printf("Block size %ld\n", inl);
     (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
     return inl;
 }

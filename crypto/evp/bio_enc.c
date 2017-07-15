@@ -12,6 +12,8 @@
 #include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
+#include "crypto/engine/eng_int.h"
+#include "crypto/evp/evp_locl.h"
 #include "internal/bio.h"
 
 static int enc_write(BIO *h, const char *buf, int num);
@@ -36,7 +38,8 @@ typedef struct enc_struct {
      * buf is larger than ENC_BLOCK_SIZE because EVP_DecryptUpdate can return
      * up to a block more data than is presented to it
      */
-    unsigned char buf[BUF_OFFSET + ENC_BLOCK_SIZE];
+    size_t buf_total_bytes;
+    unsigned char *buf;
 } BIO_ENC_CTX;
 
 static const BIO_METHOD methods_enc = {
@@ -73,6 +76,14 @@ static int enc_new(BIO *bi)
         OPENSSL_free(ctx);
         return 0;
     }
+    
+    ctx->buf = (unsigned char *) malloc(sizeof(unsigned char) * (BUF_OFFSET + ENC_BLOCK_SIZE));
+    ctx->buf_total_bytes = BUF_OFFSET + ENC_BLOCK_SIZE;
+    if (ctx->buf == NULL) {
+        OPENSSL_free(ctx);
+        return 0;
+    }
+    
     ctx->cont = 1;
     ctx->ok = 1;
     ctx->read_end = ctx->read_start = &(ctx->buf[BUF_OFFSET]);
@@ -94,6 +105,7 @@ static int enc_free(BIO *a)
         return 0;
 
     EVP_CIPHER_CTX_free(b->cipher);
+    free(ctx->buf);
     OPENSSL_clear_free(b, sizeof(BIO_ENC_CTX));
     BIO_set_data(a, NULL);
     BIO_set_init(a, 0);
@@ -101,15 +113,29 @@ static int enc_free(BIO *a)
     return 1;
 }
 
+static void try_set_custom_enc_block_size(BIO_ENC_CTX *ctx, size_t *block_size) {
+    if (ctx->cipher->engine != NULL) {
+        size_t custom_block_size = ctx->cipher->engine->enc_block_size;
+        *block_size = custom_block_size;
+        if (ctx->buf_total_bytes != custom_block_size + BUF_OFFSET) {
+            ctx->buf = (unsigned char *) realloc(ctx->buf, sizeof(unsigned char) * (custom_block_size + BUF_OFFSET));
+            ctx->buf_total_bytes = custom_block_size + BUF_OFFSET;
+        }
+    }
+}
+
 static int enc_read(BIO *b, char *out, int outl)
 {
     int ret = 0, i, blocksize;
     BIO_ENC_CTX *ctx;
     BIO *next;
+    size_t enc_block_size = ENC_BLOCK_SIZE;
 
     if (out == NULL)
         return (0);
     ctx = BIO_get_data(b);
+    
+    try_set_custom_enc_block_size(ctx, &enc_block_size);
 
     next = BIO_next(b);
     if ((ctx == NULL) || (next == NULL))
@@ -146,7 +172,7 @@ static int enc_read(BIO *b, char *out, int outl)
 
         if (ctx->read_start == ctx->read_end) { /* time to read more data */
             ctx->read_end = ctx->read_start = &(ctx->buf[BUF_OFFSET]);
-            i = BIO_read(next, ctx->read_start, ENC_BLOCK_SIZE);
+            i = BIO_read(next, ctx->read_start, enc_block_size);
             if (i > 0)
                 ctx->read_end += i;
         } else {
@@ -234,11 +260,14 @@ static int enc_write(BIO *b, const char *in, int inl)
     int ret = 0, n, i;
     BIO_ENC_CTX *ctx;
     BIO *next;
+    size_t enc_block_size = ENC_BLOCK_SIZE;
 
     ctx = BIO_get_data(b);
     next = BIO_next(b);
     if ((ctx == NULL) || (next == NULL))
         return 0;
+    
+    try_set_custom_enc_block_size(ctx, &enc_block_size);
 
     ret = inl;
 
@@ -260,7 +289,7 @@ static int enc_write(BIO *b, const char *in, int inl)
 
     ctx->buf_off = 0;
     while (inl > 0) {
-        n = (inl > ENC_BLOCK_SIZE) ? ENC_BLOCK_SIZE : inl;
+        n = (inl > enc_block_size) ? enc_block_size : inl;
         if (!EVP_CipherUpdate(ctx->cipher,
                               ctx->buf, &ctx->buf_len,
                               (const unsigned char *)in, n)) {
@@ -423,5 +452,6 @@ int BIO_set_cipher(BIO *b, const EVP_CIPHER *c, const unsigned char *k,
 
     if (callback != NULL)
         return callback(b, BIO_CB_CTRL, (const char *)c, BIO_CTRL_SET, e, 1L);
+    
     return 1;
 }
