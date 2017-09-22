@@ -105,7 +105,7 @@ static int enc_free(BIO *a)
         return 0;
 
     EVP_CIPHER_CTX_free(b->cipher);
-    free(ctx->buf);
+    free(b->buf);
     OPENSSL_clear_free(b, sizeof(BIO_ENC_CTX));
     BIO_set_data(a, NULL);
     BIO_set_init(a, 0);
