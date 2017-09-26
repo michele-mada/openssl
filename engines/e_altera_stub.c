@@ -32,6 +32,10 @@ static int altera_stub_cipher_nids[] = {
     NID_aes_128_ecb,
     NID_aes_192_ecb,
     NID_aes_256_ecb,
+    NID_aes_128_ctr,
+    NID_aes_192_ctr,
+    NID_aes_256_ctr,
+
     0
 };
 
@@ -43,10 +47,8 @@ static int bind_altera_stub(ENGINE *e)
 {
     /* Ensure the ossltest error handling is set up */
     ERR_load_ALTERASTUB_strings();
-
     if (!ENGINE_set_id(e, engine_altera_stub_id)
         || !ENGINE_set_name(e, engine_altera_stub_name)
-        || !ENGINE_set_enc_block_size(e, 8192)  //TODO: test value here
         //|| !ENGINE_set_digests(e, ossltest_digests)
         || !ENGINE_set_ciphers(e, altera_stub_ciphers)
         || !ENGINE_set_destroy_function(e, altera_stub_destroy)
@@ -99,14 +101,15 @@ void ENGINE_load_altera_stub(void)
 
 static int altera_stub_init(ENGINE *e)
 {
-    global_env = init_OpenCLEnv();
-    return 1;
+    global_env = OpenCLEnv_init();
+    int status = ENGINE_set_enc_block_size(e, OpenCLEnv_get_enc_block_size(global_env));
+    return status && (global_env != NULL);
 }
 
 
 static int altera_stub_finish(ENGINE *e)
 {
-    destroy_OpenCLEnv(global_env);
+    OpenCLEnv_destroy(global_env);
     return 1;
 }
 
@@ -143,6 +146,15 @@ static int altera_stub_ciphers(ENGINE *e, const EVP_CIPHER **cipher,
         case NID_aes_256_ecb:
             *cipher = altera_stub_aes_256_ecb();
             break;
+        case NID_aes_128_ctr:
+            *cipher = altera_stub_aes_128_ctr();
+            break;
+        case NID_aes_192_ctr:
+            *cipher = altera_stub_aes_192_ctr();
+            break;
+        case NID_aes_256_ctr:
+            *cipher = altera_stub_aes_256_ctr();
+            break;
         default:
             ok = 0;
             *cipher = NULL;
@@ -158,11 +170,9 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx,
                              const unsigned char *key,
                              const unsigned char *iv,
                              int enc){
-    int mode = EVP_CIPHER_CTX_mode(ctx);
+    int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
 
     EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-
-    memcpy(data->k.iv, iv, 8);
 
     // key schedule
     opencl_des_set_encrypt_key(
@@ -170,10 +180,11 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx,
         EVP_CIPHER_CTX_key_length(ctx),
         &data->k);
 
-    if (mode & EVP_CIPH_ECB_MODE) {
+    if (mode == EVP_CIPH_ECB_MODE) {
         data->stream.cipher = enc ? opencl_des_ecb_encrypt : opencl_des_ecb_decrypt;
         data->must_update_iv = 0;
-    } else if (mode & EVP_CIPH_CTR_MODE) {
+    } else if (mode == EVP_CIPH_CTR_MODE) {
+        memcpy(data->k.iv, iv, 8);
         data->stream.cipher = enc ? opencl_des_ctr_encrypt : opencl_des_ctr_decrypt;
         data->must_update_iv = 1;
     }
@@ -204,22 +215,28 @@ int altera_stub_aes_128_init_key(EVP_CIPHER_CTX *ctx,
                                  const unsigned char *key,
                                  const unsigned char *iv,
                                  int enc){
-    int mode = EVP_CIPHER_CTX_mode(ctx);
+    int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
 
     EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
 
-    memcpy(data->k.iv, iv, 16);
-
     // key schedule
-    opencl_aes_128_set_encrypt_key(
-        key,
-        EVP_CIPHER_CTX_key_length(ctx),
-        &data->k);
+    if (enc || (mode == EVP_CIPH_CTR_MODE)) {
+        opencl_aes_128_set_encrypt_key(
+            key,
+            EVP_CIPHER_CTX_key_length(ctx),
+            &data->k);
+    } else {
+        opencl_aes_128_set_decrypt_key(
+            key,
+            EVP_CIPHER_CTX_key_length(ctx),
+            &data->k);
+    }
 
-    if (mode & EVP_CIPH_ECB_MODE) {
+    if (mode == EVP_CIPH_ECB_MODE) {
         data->stream.cipher = enc ? opencl_aes_128_ecb_encrypt : opencl_aes_128_ecb_decrypt;
         data->must_update_iv = 0;
-    } else if (mode & EVP_CIPH_CTR_MODE) {
+    } else if (mode == EVP_CIPH_CTR_MODE) {
+        memcpy(data->k.iv, iv, 16);
         data->stream.cipher = enc ? opencl_aes_128_ctr_encrypt : opencl_aes_128_ctr_decrypt;
         data->must_update_iv = 1;
     }
@@ -235,22 +252,28 @@ int altera_stub_aes_192_init_key(EVP_CIPHER_CTX *ctx,
                                  const unsigned char *key,
                                  const unsigned char *iv,
                                  int enc){
-    int mode = EVP_CIPHER_CTX_mode(ctx);
+    int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
 
     EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
 
-    memcpy(data->k.iv, iv, 16);
-
     // key schedule
-    opencl_aes_192_set_encrypt_key(
-        key,
-        EVP_CIPHER_CTX_key_length(ctx),
-        &data->k);
+    if (enc || (mode == EVP_CIPH_CTR_MODE)) {
+        opencl_aes_192_set_encrypt_key(
+            key,
+            EVP_CIPHER_CTX_key_length(ctx),
+            &data->k);
+    } else {
+        opencl_aes_192_set_decrypt_key(
+            key,
+            EVP_CIPHER_CTX_key_length(ctx),
+            &data->k);
+    }
 
-    if (mode & EVP_CIPH_ECB_MODE) {
+    if (mode == EVP_CIPH_ECB_MODE) {
         data->stream.cipher = enc ? opencl_aes_192_ecb_encrypt : opencl_aes_192_ecb_decrypt;
         data->must_update_iv = 0;
-    } else if (mode & EVP_CIPH_CTR_MODE) {
+    } else if (mode == EVP_CIPH_CTR_MODE) {
+        memcpy(data->k.iv, iv, 16);
         data->stream.cipher = enc ? opencl_aes_192_ctr_encrypt : opencl_aes_192_ctr_decrypt;
         data->must_update_iv = 1;
     }
@@ -266,22 +289,28 @@ int altera_stub_aes_256_init_key(EVP_CIPHER_CTX *ctx,
                                  const unsigned char *key,
                                  const unsigned char *iv,
                                  int enc){
-    int mode = EVP_CIPHER_CTX_mode(ctx);
+    int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
 
     EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
 
-    memcpy(data->k.iv, iv, 16);
-
     // key schedule
-    opencl_aes_256_set_encrypt_key(
-        key,
-        EVP_CIPHER_CTX_key_length(ctx),
-        &data->k);
+    if (enc || (mode == EVP_CIPH_CTR_MODE)) {
+        opencl_aes_256_set_encrypt_key(
+            key,
+            EVP_CIPHER_CTX_key_length(ctx),
+            &data->k);
+    } else {
+        opencl_aes_256_set_decrypt_key(
+            key,
+            EVP_CIPHER_CTX_key_length(ctx),
+            &data->k);
+    }
 
-    if (mode & EVP_CIPH_ECB_MODE) {
+    if (mode == EVP_CIPH_ECB_MODE) {
         data->stream.cipher = enc ? opencl_aes_256_ecb_encrypt : opencl_aes_256_ecb_decrypt;
         data->must_update_iv = 0;
-    } else if (mode & EVP_CIPH_CTR_MODE) {
+    } else if (mode == EVP_CIPH_CTR_MODE) {
+        memcpy(data->k.iv, iv, 16);
         data->stream.cipher = enc ? opencl_aes_256_ctr_encrypt : opencl_aes_256_ctr_decrypt;
         data->must_update_iv = 1;
     }

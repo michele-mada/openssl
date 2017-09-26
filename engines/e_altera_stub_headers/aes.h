@@ -14,6 +14,8 @@ typedef struct {
     } stream;
 } EVP_OPENCL_AES_KEY;
 
+// ecb mode
+
 static EVP_CIPHER *_hidden_aes_128_ecb = NULL;
 static const EVP_CIPHER *altera_stub_aes_128_ecb(void)
 {
@@ -84,4 +86,79 @@ static const EVP_CIPHER *altera_stub_aes_256_ecb(void)
         _hidden_aes_256_ecb = NULL;
     }
     return _hidden_aes_256_ecb;
+}
+
+
+// ctr mode
+
+static EVP_CIPHER *_hidden_aes_128_ctr = NULL;
+static const EVP_CIPHER *altera_stub_aes_128_ctr(void)
+{
+    if (_hidden_aes_128_ctr == NULL
+        && ((_hidden_aes_128_ctr = EVP_CIPHER_meth_new(NID_aes_128_ctr,
+                                                       16 /* block size */,
+                                                       16 /* key len */)) == NULL
+            || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_128_ctr, 16)
+            || !EVP_CIPHER_meth_set_flags(_hidden_aes_128_ctr,
+                                          EVP_CIPH_FLAG_DEFAULT_ASN1
+                                          | EVP_CIPH_CTR_MODE)
+            || !EVP_CIPHER_meth_set_init(_hidden_aes_128_ctr,
+                                         altera_stub_aes_128_init_key)
+            || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_128_ctr,
+                                              altera_stub_aes_cipher)
+            || !EVP_CIPHER_meth_set_impl_ctx_size(_hidden_aes_128_ctr,
+                                                  sizeof(EVP_OPENCL_AES_KEY))
+                                              )) {
+        EVP_CIPHER_meth_free(_hidden_aes_128_ctr);
+        _hidden_aes_128_ctr = NULL;
+    }
+    return _hidden_aes_128_ctr;
+}
+
+static EVP_CIPHER *_hidden_aes_192_ctr = NULL;
+static const EVP_CIPHER *altera_stub_aes_192_ctr(void)
+{
+    if (_hidden_aes_192_ctr == NULL
+        && ((_hidden_aes_192_ctr = EVP_CIPHER_meth_new(NID_aes_192_ctr,
+                                                       16 /* block size */,
+                                                       24 /* key len */)) == NULL
+            || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_192_ctr, 16)
+            || !EVP_CIPHER_meth_set_flags(_hidden_aes_192_ctr,
+                                          EVP_CIPH_FLAG_DEFAULT_ASN1
+                                          | EVP_CIPH_CTR_MODE)
+            || !EVP_CIPHER_meth_set_init(_hidden_aes_192_ctr,
+                                         altera_stub_aes_192_init_key)
+            || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_192_ctr,
+                                              altera_stub_aes_cipher)
+            || !EVP_CIPHER_meth_set_impl_ctx_size(_hidden_aes_192_ctr,
+                                                  sizeof(EVP_OPENCL_AES_KEY))
+                                              )) {
+        EVP_CIPHER_meth_free(_hidden_aes_192_ctr);
+        _hidden_aes_192_ctr = NULL;
+    }
+    return _hidden_aes_192_ctr;
+}
+
+static EVP_CIPHER *_hidden_aes_256_ctr = NULL;
+static const EVP_CIPHER *altera_stub_aes_256_ctr(void)
+{
+    if (_hidden_aes_256_ctr == NULL
+        && ((_hidden_aes_256_ctr = EVP_CIPHER_meth_new(NID_aes_256_ctr,
+                                                       16 /* block size */,
+                                                       32 /* key len */)) == NULL
+            || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_256_ctr, 16)
+            || !EVP_CIPHER_meth_set_flags(_hidden_aes_256_ctr,
+                                          EVP_CIPH_FLAG_DEFAULT_ASN1
+                                          | EVP_CIPH_CTR_MODE)
+            || !EVP_CIPHER_meth_set_init(_hidden_aes_256_ctr,
+                                         altera_stub_aes_256_init_key)
+            || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_256_ctr,
+                                              altera_stub_aes_cipher)
+            || !EVP_CIPHER_meth_set_impl_ctx_size(_hidden_aes_256_ctr,
+                                                  sizeof(EVP_OPENCL_AES_KEY))
+                                              )) {
+        EVP_CIPHER_meth_free(_hidden_aes_256_ctr);
+        _hidden_aes_256_ctr = NULL;
+    }
+    return _hidden_aes_256_ctr;
 }
