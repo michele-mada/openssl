@@ -1,4 +1,4 @@
-#include "../opencl_altera/include/opencl_ciphers.h"
+#include "../../opencl_altera/include/opencl_ciphers.h"
 
 /* setup AES */
 int altera_stub_aes_128_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key, const unsigned char *iv, int enc);

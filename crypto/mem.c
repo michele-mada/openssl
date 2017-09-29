@@ -17,6 +17,8 @@
 # include <execinfo.h>
 #endif
 
+#define AOCL_ALIGNMENT 64
+
 /*
  * the following pointers may be changed as long as 'allow_customize' is set
  */
@@ -178,14 +180,14 @@ void *CRYPTO_malloc(size_t num, const char *file, int line)
 #ifndef OPENSSL_NO_CRYPTO_MDEBUG
     if (call_malloc_debug) {
         CRYPTO_mem_debug_malloc(NULL, num, 0, file, line);
-        ret = malloc(num);
+        ret = aligned_alloc(AOCL_ALIGNMENT, num);
         CRYPTO_mem_debug_malloc(ret, num, 1, file, line);
     } else {
-        ret = malloc(num);
+        ret = aligned_alloc(AOCL_ALIGNMENT, num);
     }
 #else
     osslargused(file); osslargused(line);
-    ret = malloc(num);
+    ret = aligned_alloc(AOCL_ALIGNMENT, num);
 #endif
 
     return ret;

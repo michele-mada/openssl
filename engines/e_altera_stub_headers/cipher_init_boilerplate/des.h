@@ -1,4 +1,4 @@
-#include "../opencl_altera/include/opencl_ciphers.h"
+#include "../../opencl_altera/include/opencl_ciphers.h"
 
 /* setup DES */
 int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key, const unsigned char *iv, int enc);

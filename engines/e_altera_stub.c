@@ -9,6 +9,7 @@
 #include "e_altera_stub_err.c"
 
 #include "opencl_altera/include/opencl_ciphers.h"
+#include "e_altera_stub_headers/aligned_mem_management.h"
 
 /* Engine Id and Name */
 static const char *engine_altera_stub_id = "altera_stub";
@@ -39,8 +40,8 @@ static int altera_stub_cipher_nids[] = {
     0
 };
 
-#include "e_altera_stub_headers/des.h"
-#include "e_altera_stub_headers/aes.h"
+#include "e_altera_stub_headers/cipher_init_boilerplate/des.h"
+#include "e_altera_stub_headers/cipher_init_boilerplate/aes.h"
 
 
 static int bind_altera_stub(ENGINE *e)
@@ -62,8 +63,7 @@ static int bind_altera_stub(ENGINE *e)
 }
 
 #ifndef OPENSSL_NO_DYNAMIC_ENGINE
-static int bind_helper(ENGINE *e, const char *id)
-{
+static int bind_helper(ENGINE *e, const char *id) {
     if (id && (strcmp(id, engine_altera_stub_id) != 0))
         return 0;
     if (!bind_altera_stub(e))
@@ -73,10 +73,11 @@ static int bind_helper(ENGINE *e, const char *id)
 
 IMPLEMENT_DYNAMIC_CHECK_FN()
     IMPLEMENT_DYNAMIC_BIND_FN(bind_helper)
+
+
 #endif
 
-static ENGINE *engine_altera_stub(void)
-{
+static ENGINE *engine_altera_stub(void) {
     ENGINE *ret = ENGINE_new();
     if (ret == NULL)
         return NULL;
@@ -87,8 +88,7 @@ static ENGINE *engine_altera_stub(void)
     return ret;
 }
 
-void ENGINE_load_altera_stub(void)
-{
+void ENGINE_load_altera_stub(void) {
     /* Copied from eng_[openssl|dyn].c */
     ENGINE *toadd = engine_altera_stub();
     if (!toadd)
@@ -99,32 +99,30 @@ void ENGINE_load_altera_stub(void)
 }
 
 
-static int altera_stub_init(ENGINE *e)
-{
+static int altera_stub_init(ENGINE *e) {
     global_env = OpenCLEnv_init();
     int status = ENGINE_set_enc_block_size(e, OpenCLEnv_get_enc_block_size(global_env));
     return status && (global_env != NULL);
 }
 
 
-static int altera_stub_finish(ENGINE *e)
-{
+static int altera_stub_finish(ENGINE *e) {
     OpenCLEnv_destroy(global_env);
     return 1;
 }
 
 
-static int altera_stub_destroy(ENGINE *e)
-{
+static int altera_stub_destroy(ENGINE *e) {
     //destroy_digests();
     //destroy_ciphers();
     ERR_unload_ALTERASTUB_strings();
     return 1;
 }
 
-static int altera_stub_ciphers(ENGINE *e, const EVP_CIPHER **cipher,
-                               const int **nids, int nid)
-{
+static int altera_stub_ciphers(ENGINE *e,
+                               const EVP_CIPHER **cipher,
+                               const int **nids,
+                               int nid) {
     int ok = 1;
     if (!cipher) {
         /* We are returning a list of supported nids */
