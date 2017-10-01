@@ -295,7 +295,6 @@ static int enc_write(BIO *b, const char *in, int inl)
     ctx->buf_off = 0;
     while (inl > 0) {
         n = (inl > enc_block_size) ? enc_block_size : inl;
-        printf("update cipher; n=%lu\n", n);
         if (!EVP_CipherUpdate(ctx->cipher,
                               ctx->buf, &ctx->buf_len,
                               (const unsigned char *)in, n)) {
