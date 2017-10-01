@@ -77,7 +77,7 @@ static int enc_new(BIO *bi)
         return 0;
     }
     
-    ctx->buf = (unsigned char *) malloc(sizeof(unsigned char) * (BUF_OFFSET + ENC_BLOCK_SIZE));
+    ctx->buf = (unsigned char *) aligned_alloc(AOCL_ALIGNMENT, sizeof(unsigned char) * (BUF_OFFSET + ENC_BLOCK_SIZE));
     ctx->buf_total_bytes = BUF_OFFSET + ENC_BLOCK_SIZE;
     if (ctx->buf == NULL) {
         OPENSSL_free(ctx);
