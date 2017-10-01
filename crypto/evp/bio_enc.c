@@ -25,6 +25,7 @@ static long enc_callback_ctrl(BIO *h, int cmd, bio_info_cb *fps);
 #define ENC_BLOCK_SIZE  (1024*4)
 #define ENC_MIN_CHUNK   (256)
 #define BUF_OFFSET      (ENC_MIN_CHUNK + EVP_MAX_BLOCK_LENGTH)
+#define AOCL_ALIGNMENT  64
 
 typedef struct enc_struct {
     int buf_len;
