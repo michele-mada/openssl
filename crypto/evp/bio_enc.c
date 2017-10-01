@@ -59,6 +59,18 @@ static const BIO_METHOD methods_enc = {
     enc_callback_ctrl,
 };
 
+static void try_set_custom_enc_block_size(BIO_ENC_CTX *ctx, size_t *block_size) {
+    if (ctx->cipher->engine != NULL) {
+        size_t custom_block_size = ctx->cipher->engine->enc_block_size;
+        *block_size = custom_block_size;
+        if (ctx->buf_total_bytes != custom_block_size + BUF_OFFSET) {
+            free(ctx->buf);
+            ctx->buf = (unsigned char *) aligned_alloc(AOCL_ALIGNMENT, sizeof(unsigned char) * (BUF_OFFSET + custom_block_size));
+            ctx->buf_total_bytes = custom_block_size + BUF_OFFSET;
+        }
+    }
+}
+
 const BIO_METHOD *BIO_f_cipher(void)
 {
     return (&methods_enc);
@@ -67,6 +79,8 @@ const BIO_METHOD *BIO_f_cipher(void)
 static int enc_new(BIO *bi)
 {
     BIO_ENC_CTX *ctx;
+    
+    size_t enc_block_size = ENC_BLOCK_SIZE;
 
     ctx = OPENSSL_zalloc(sizeof(*ctx));
     if (ctx == NULL)
@@ -78,8 +92,10 @@ static int enc_new(BIO *bi)
         return 0;
     }
     
-    ctx->buf = (unsigned char *) aligned_alloc(AOCL_ALIGNMENT, sizeof(unsigned char) * (BUF_OFFSET + ENC_BLOCK_SIZE));
-    ctx->buf_total_bytes = BUF_OFFSET + ENC_BLOCK_SIZE;
+    try_set_custom_enc_block_size(ctx, &enc_block_size);
+    
+    ctx->buf = (unsigned char *) aligned_alloc(AOCL_ALIGNMENT, sizeof(unsigned char) * (BUF_OFFSET + enc_block_size));
+    ctx->buf_total_bytes = BUF_OFFSET + enc_block_size;
     if (ctx->buf == NULL) {
         OPENSSL_free(ctx);
         return 0;
@@ -112,17 +128,6 @@ static int enc_free(BIO *a)
     BIO_set_init(a, 0);
 
     return 1;
-}
-
-static void try_set_custom_enc_block_size(BIO_ENC_CTX *ctx, size_t *block_size) {
-    if (ctx->cipher->engine != NULL) {
-        size_t custom_block_size = ctx->cipher->engine->enc_block_size;
-        *block_size = custom_block_size;
-        if (ctx->buf_total_bytes != custom_block_size + BUF_OFFSET) {
-            ctx->buf = (unsigned char *) realloc(ctx->buf, sizeof(unsigned char) * (custom_block_size + BUF_OFFSET));
-            ctx->buf_total_bytes = custom_block_size + BUF_OFFSET;
-        }
-    }
 }
 
 static int enc_read(BIO *b, char *out, int outl)
@@ -200,7 +205,6 @@ static int enc_read(BIO *b, char *out, int outl)
                  * has to accommodate extra block...
                  */
                 int j = outl - blocksize, buf_len;
-
                 if (!EVP_CipherUpdate(ctx->cipher,
                                       (unsigned char *)out, &buf_len,
                                       ctx->read_start, i > j ? j : i)) {
@@ -291,6 +295,7 @@ static int enc_write(BIO *b, const char *in, int inl)
     ctx->buf_off = 0;
     while (inl > 0) {
         n = (inl > enc_block_size) ? enc_block_size : inl;
+        printf("update cipher; n=%lu\n", n);
         if (!EVP_CipherUpdate(ctx->cipher,
                               ctx->buf, &ctx->buf_len,
                               (const unsigned char *)in, n)) {

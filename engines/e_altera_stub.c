@@ -325,6 +325,7 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                            const unsigned char *in,
                            size_t inl) {
     EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
+    printf("inl: %lu\n", inl);
     (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
     if (data->must_update_iv) {
         opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
