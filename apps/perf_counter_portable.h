@@ -74,6 +74,7 @@ static void PerfCounter_start(PerfCounter* perf_counter) {
     pthread_mutex_lock(&(perf_counter->save_mutex));
     perf_counter->accumulator = 0;
     clock_gettime(CLOCK_MONOTONIC, &(perf_counter->time_start));
+    clock_gettime(CLOCK_MONOTONIC, &(perf_counter->time_last_sample));
     pthread_mutex_unlock(&(perf_counter->save_mutex));
 }
 
