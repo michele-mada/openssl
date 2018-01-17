@@ -114,7 +114,7 @@ static PerfCounter* PerfCounter_init(char *filename, unsigned long refresh_time)
     }
 
     PerfCounter_start(new_perfc);
-    printf("performance counter enabled (file %s)\n", new_perfc->filename);
+    fprintf(stderr, "performance counter enabled (file %s)\n", new_perfc->filename);
     return new_perfc;
 }
 
