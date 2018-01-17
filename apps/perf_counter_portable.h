@@ -9,7 +9,7 @@
 #include <pthread.h>
 
 
-#define PERF_AMOUNT_DIVIDER 1048576   // B -> MB conversion
+#define PERF_AMOUNT_DIVIDER 1048576.0   // B -> MB conversion
 #define DEFAULT_PERF_TICK 2000
 
 #define DEFAULT_PERF_FILENAME_ENV "M2DC_PERF_FILE"
