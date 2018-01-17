@@ -18,6 +18,7 @@
 
 typedef struct PerfCounter {
     struct timespec time_start;
+    struct timespec time_last_sample;
     size_t accumulator;
     size_t accumulator_latch;  // avoid hitting 0 when restarting between consecutive separate runs
     pthread_t save_thread;
@@ -47,9 +48,8 @@ static void savefile_worker(void *owner) {
         usleep(perf_counter->refresh_time * 1000);
         pthread_mutex_lock(&(perf_counter->save_mutex));
 
-        struct timespec time_now, difference;
-        clock_gettime(CLOCK_MONOTONIC, &time_now);
-        timespec_diff(&(perf_counter->time_start), &time_now, &difference);
+        struct timespec difference;
+        timespec_diff(&(perf_counter->time_start), &(perf_counter->time_last_sample), &difference);
 
         double perf_measurement;
         double delta_time = difference.tv_sec + (difference.tv_nsec / 1000000000.0);
@@ -83,6 +83,7 @@ static void PerfCounter_mark(PerfCounter* perf_counter, size_t quantity_amount) 
     pthread_mutex_lock(&(perf_counter->save_mutex));
     perf_counter->accumulator += quantity_amount;
     perf_counter->accumulator_latch = perf_counter->accumulator;
+    clock_gettime(CLOCK_MONOTONIC, &(perf_counter->time_last_sample));
     pthread_mutex_unlock(&(perf_counter->save_mutex));
 }
 
