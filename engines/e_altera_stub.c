@@ -172,16 +172,20 @@ static int altera_stub_ciphers(ENGINE *e,
 
     This function exist to facilitate performance measurements.
 */
-#define DUMMY_BUF_SIZE 4096
+#define DUMMY_BUF_SIZE 4096*3*5
 void pre_program_helper_des(EVP_OPENCL_DES_KEY *data) {
-    uint8_t dummy_in[DUMMY_BUF_SIZE];
-    uint8_t dummy_out[DUMMY_BUF_SIZE];
+    uint8_t *dummy_in = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
+    uint8_t *dummy_out = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
     (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out);
+    free(dummy_out);
+    free(dummy_in);
 }
 void pre_program_helper_aes(EVP_OPENCL_AES_KEY *data) {
-    uint8_t dummy_in[DUMMY_BUF_SIZE];
-    uint8_t dummy_out[DUMMY_BUF_SIZE];
+    uint8_t *dummy_in = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
+    uint8_t *dummy_out = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
     (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out);
+    free(dummy_out);
+    free(dummy_in);
 }
 
 /* des implementation */
