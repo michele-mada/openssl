@@ -172,7 +172,7 @@ static int altera_stub_ciphers(ENGINE *e,
 
     This function exist to facilitate performance measurements.
 */
-#define DUMMY_BUF_SIZE 1024*3*5*7
+#define DUMMY_BUF_SIZE 4096
 void pre_program_helper(EVP_OPENCL_DES_KEY *data) {
     uint8_t dummy_in[DUMMY_BUF_SIZE];
     uint8_t dummy_out[DUMMY_BUF_SIZE];
