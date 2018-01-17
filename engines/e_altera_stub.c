@@ -162,6 +162,23 @@ static int altera_stub_ciphers(ENGINE *e,
 }
 
 
+/* helper functions */
+
+/*
+    If this is the first run, then the fpga won't have any program (or a wrong
+    program) loaded.
+    This function (called directly after the key setup) processes a dummy buffer;
+    This way, the program will be loaded immediately.
+
+    This function exist to facilitate performance measurements.
+*/
+#define DUMMY_BUF_SIZE 1024*3*5*7
+void pre_program_helper(EVP_OPENCL_DES_KEY *data) {
+    uint8_t dummy_in[DUMMY_BUF_SIZE];
+    uint8_t dummy_out[DUMMY_BUF_SIZE];
+    (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out);
+}
+
 /* des implementation */
 
 int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx,
@@ -190,6 +207,8 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx,
     else {
         return 0;
     }
+
+    pre_program_helper(data);
 
     return 1;
 }
@@ -243,6 +262,8 @@ int altera_stub_aes_128_init_key(EVP_CIPHER_CTX *ctx,
         return 0;
     }
 
+    pre_program_helper(data);
+
     return 1;
 }
 
@@ -280,6 +301,8 @@ int altera_stub_aes_192_init_key(EVP_CIPHER_CTX *ctx,
         return 0;
     }
 
+    pre_program_helper(data);
+
     return 1;
 }
 
@@ -316,6 +339,8 @@ int altera_stub_aes_256_init_key(EVP_CIPHER_CTX *ctx,
     else {
         return 0;
     }
+
+    pre_program_helper(data);
 
     return 1;
 }
