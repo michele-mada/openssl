@@ -173,7 +173,12 @@ static int altera_stub_ciphers(ENGINE *e,
     This function exist to facilitate performance measurements.
 */
 #define DUMMY_BUF_SIZE 4096
-void pre_program_helper(EVP_OPENCL_DES_KEY *data) {
+void pre_program_helper_des(EVP_OPENCL_DES_KEY *data) {
+    uint8_t dummy_in[DUMMY_BUF_SIZE];
+    uint8_t dummy_out[DUMMY_BUF_SIZE];
+    (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out);
+}
+void pre_program_helper_aes(EVP_OPENCL_AES_KEY *data) {
     uint8_t dummy_in[DUMMY_BUF_SIZE];
     uint8_t dummy_out[DUMMY_BUF_SIZE];
     (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out);
@@ -208,7 +213,7 @@ int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx,
         return 0;
     }
 
-    pre_program_helper(data);
+    pre_program_helper_des(data);
 
     return 1;
 }
@@ -262,7 +267,7 @@ int altera_stub_aes_128_init_key(EVP_CIPHER_CTX *ctx,
         return 0;
     }
 
-    pre_program_helper(data);
+    pre_program_helper_aes(data);
 
     return 1;
 }
@@ -301,7 +306,7 @@ int altera_stub_aes_192_init_key(EVP_CIPHER_CTX *ctx,
         return 0;
     }
 
-    pre_program_helper(data);
+    pre_program_helper_aes(data);
 
     return 1;
 }
@@ -340,7 +345,7 @@ int altera_stub_aes_256_init_key(EVP_CIPHER_CTX *ctx,
         return 0;
     }
 
-    pre_program_helper(data);
+    pre_program_helper_aes(data);
 
     return 1;
 }
