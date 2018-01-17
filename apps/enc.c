@@ -294,6 +294,8 @@ int enc_main(int argc, char **argv)
     strbuf = app_malloc(SIZE, "strbuf");
     buff = app_malloc(EVP_ENCODE_LENGTH(bsize), "evp buffer");
 
+    perf_counter = PerfCounter_create_auto();
+
     if (infile == NULL) {
         in = dup_bio_in(informat);
     } else {
@@ -301,8 +303,6 @@ int enc_main(int argc, char **argv)
     }
     if (in == NULL)
         goto end;
-
-    perf_counter = PerfCounter_create_auto();
 
     if (str == NULL && passarg != NULL) {
         if (!app_passwd(passarg, NULL, &pass, NULL)) {
@@ -539,7 +539,7 @@ int enc_main(int argc, char **argv)
     if (benc != NULL)
         wbio = BIO_push(benc, wbio);
 
-    PERF_CTR_START(perf_counter);
+    //PERF_CTR_START(perf_counter);
 
     for (;;) {
         inl = BIO_read(rbio, (char *)buff, bsize);
