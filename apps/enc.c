@@ -24,6 +24,8 @@
 #endif
 #include <ctype.h>
 
+#include "perf_counter_portable.h"
+
 #undef SIZE
 #undef BSIZE
 #define SIZE    (512)
@@ -110,6 +112,8 @@ int enc_main(int argc, char **argv)
     int do_zlib = 0;
     BIO *bzl = NULL;
 #endif
+
+    PerfCounter *perf_counter = NULL;
 
     /* first check the program name */
     prog = opt_progname(argv[0]);
@@ -297,6 +301,8 @@ int enc_main(int argc, char **argv)
     }
     if (in == NULL)
         goto end;
+
+    perf_counter = PerfCounter_create_auto();
 
     if (str == NULL && passarg != NULL) {
         if (!app_passwd(passarg, NULL, &pass, NULL)) {
@@ -533,6 +539,8 @@ int enc_main(int argc, char **argv)
     if (benc != NULL)
         wbio = BIO_push(benc, wbio);
 
+    PERF_CTR_START(perf_counter);
+
     for (;;) {
         inl = BIO_read(rbio, (char *)buff, bsize);
         if (inl <= 0)
@@ -541,6 +549,7 @@ int enc_main(int argc, char **argv)
             BIO_printf(bio_err, "error writing output file\n");
             goto end;
         }
+        PERF_CTR_MARK(perf_counter, inl);
     }
     if (!BIO_flush(wbio)) {
         BIO_printf(bio_err, "bad decrypt\n");
@@ -553,6 +562,7 @@ int enc_main(int argc, char **argv)
         BIO_printf(bio_err, "bytes written: %8ju\n", BIO_number_written(out));
     }
  end:
+    PERF_CTR_DESTROY(perf_counter);
     ERR_print_errors(bio_err);
     OPENSSL_free(strbuf);
     OPENSSL_free(buff);
