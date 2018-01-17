@@ -539,7 +539,7 @@ int enc_main(int argc, char **argv)
     if (benc != NULL)
         wbio = BIO_push(benc, wbio);
 
-    //PERF_CTR_START(perf_counter);
+    PERF_CTR_START(perf_counter);
 
     for (;;) {
         inl = BIO_read(rbio, (char *)buff, bsize);

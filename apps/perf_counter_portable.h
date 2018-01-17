@@ -52,7 +52,8 @@ static void savefile_worker(void *owner) {
         timespec_diff(&(perf_counter->time_start), &(perf_counter->time_last_sample), &difference);
 
         double perf_measurement;
-        double delta_time = difference.tv_sec + (difference.tv_nsec / 1000000000.0);
+        double delta_time = ((double)difference.tv_sec) +
+                            (((double)difference.tv_nsec) / 1000000000.0);
 
         if (delta_time == 0) {
             perf_measurement = 0;
