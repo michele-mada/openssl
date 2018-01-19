@@ -102,7 +102,7 @@ void ENGINE_load_altera_stub(void) {
 static int altera_stub_init(ENGINE *e) {
     global_env = OpenCLEnv_init();
     size_t engine_block_size = OpenCLEnv_get_enc_block_size(global_env);
-    size_t multiplier = 1;
+    size_t multiplier = 20;
     char *custom_multiplier = getenv("OCLC_ENGINE_MULTIPLIER");
     if (custom_multiplier != NULL) {
         multiplier = atol(custom_multiplier);
