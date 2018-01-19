@@ -371,7 +371,7 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
     int blocks_in_burst = blocks_inbound;
     if (inl % engine_block_size == 0) blocks_in_burst--;  // no reminder: make a last non-burst block
 
-    size_t reminder = (blocks_in_burst*engine_block_size) - inl;
+    size_t reminder = inl - (blocks_in_burst*engine_block_size);
 
     OpenCLEnv_toggle_burst_mode(global_env, 1);
     for (int i=0; i<blocks_in_burst; i++) {
