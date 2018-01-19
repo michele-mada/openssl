@@ -101,7 +101,13 @@ void ENGINE_load_altera_stub(void) {
 
 static int altera_stub_init(ENGINE *e) {
     global_env = OpenCLEnv_init();
-    int status = ENGINE_set_enc_block_size(e, OpenCLEnv_get_enc_block_size(global_env));
+    size_t engine_block_size = OpenCLEnv_get_enc_block_size(global_env);
+    size_t multiplier = 1;
+    char *custom_multiplier = getenv("OCLC_ENGINE_MULTIPLIER");
+    if (custom_multiplier != NULL) {
+        multiplier = atol(custom_multiplier);
+    }
+    int status = ENGINE_set_enc_block_size(e, engine_block_size * multiplier);
     return status && (global_env != NULL);
 }
 
@@ -359,6 +365,27 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                            const unsigned char *in,
                            size_t inl) {
     EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
+
+    size_t engine_block_size = OpenCLEnv_get_enc_block_size(global_env);
+    int blocks_inbound = inl / engine_block_size;  // the reminder is handled by the last (non-burst) block
+    int blocks_in_burst = blocks_inbound;
+    if (inl % engine_block_size == 0) blocks_in_burst--;  // no reminder: make a last non-burst block
+
+    size_t reminder = (blocks_in_burst*engine_block_size) - inl;
+
+    OpenCLEnv_toggle_burst_mode(global_env, 1);
+    for (int i=0; i<blocks_in_burst; i++) {
+        (data->stream.cipher) (global_env,
+                               (uint8_t*) (in + engine_block_size*i),
+                               engine_block_size, &data->k,
+                               (uint8_t*) (out + engine_block_size*i));
+    }
+    OpenCLEnv_toggle_burst_mode(global_env, 0);
+    (data->stream.cipher) (global_env,
+                           (uint8_t*) (in + engine_block_size*blocks_in_burst),
+                           reminder, &data->k,
+                           (uint8_t*) (out + engine_block_size*blocks_in_burst));
+
     (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
     if (data->must_update_iv) {
         opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
