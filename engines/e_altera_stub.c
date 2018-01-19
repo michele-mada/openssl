@@ -369,10 +369,10 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
     size_t engine_block_size = OpenCLEnv_get_enc_block_size(global_env);
     int blocks_inbound = inl / engine_block_size;  // the reminder is handled by the last (non-burst) block
     int blocks_in_burst = blocks_inbound;
-    if (inl % engine_block_size == 0) blocks_in_burst--;  // no reminder: make a last non-burst block
+    if ((inl % engine_block_size) == 0) blocks_in_burst--;  // no reminder: make a last non-burst block
 
     size_t reminder = inl - (blocks_in_burst*engine_block_size);
-
+    printf("bursts: %u = (%u x %u) + %u\n", inl, engine_block_size, blocks_in_burst, reminder);
     OpenCLEnv_toggle_burst_mode(global_env, 1);
     for (int i=0; i<blocks_in_burst; i++) {
         (data->stream.cipher) (global_env,
