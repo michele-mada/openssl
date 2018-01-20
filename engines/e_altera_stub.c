@@ -373,6 +373,7 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
 
     size_t reminder = inl - (blocks_in_burst*engine_block_size);
     //printf("bursts: %u = (%u x %u) + %u\n", inl, engine_block_size, blocks_in_burst, reminder);
+    OpenCLEnv_perf_begin_event(global_env);  // The engine also has a standalone performance counter
     OpenCLEnv_toggle_burst_mode(global_env, 1);
     for (int i=0; i<blocks_in_burst; i++) {
         (data->stream.cipher) (global_env,
