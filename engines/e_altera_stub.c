@@ -387,6 +387,8 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                            reminder, &data->k,
                            (uint8_t*) (out + engine_block_size*blocks_in_burst));
 
+    OpenCLEnv_perf_begin_event(global_env);  // reset timer again in order to visualize idle times
+
     if (data->must_update_iv) {
         opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
     }
