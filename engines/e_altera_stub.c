@@ -386,7 +386,6 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                            reminder, &data->k,
                            (uint8_t*) (out + engine_block_size*blocks_in_burst));
 
-    (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
     if (data->must_update_iv) {
         opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
     }
