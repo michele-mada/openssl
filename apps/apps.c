@@ -932,7 +932,7 @@ static int load_certs_crls(const char *file, int format,
     return rv;
 }
 
-void* app_malloc(int sz, const char *what)
+void* app_malloc(unsigned int sz, const char *what)
 {
     void *vp = OPENSSL_malloc(sz);
 
