@@ -45,6 +45,7 @@ struct doall_enc_ciphers {
 struct enc_worker_param {
     unsigned char *buff;
     BIO *wbio;
+    BIO *first_stage_model;
     int inl;
     int err;
     long blockid;
@@ -563,12 +564,14 @@ int enc_main(int argc, char **argv)
         }
     }
 
-    /* Only encrypt/decrypt as we write the file */
-    if (benc != NULL)
-        wbio = BIO_push(benc, wbio);
     
     PERF_CTR_START(perf_counter);
     if (!parallel) {
+        
+        /* Only encrypt/decrypt as we write the file */
+        if (benc != NULL)
+            wbio = BIO_push(benc, wbio);
+        
         for (;;) {
             inl = BIO_read(rbio, (char *)buff[0], bsize);
             if (inl <= 0)
@@ -585,6 +588,9 @@ int enc_main(int argc, char **argv)
         }
     }
     else {
+        BIO *temp = BIO_new(BIO_s_mem());
+        BIO *first_stage_model = BIO_push(benc, temp);
+        
         // prepare worker & param lists
         workers = (pthread_t*) app_malloc(num_parallel_workers * sizeof(pthread_t), "worker list");
         worker_params = (struct enc_worker_param*) app_malloc(num_parallel_workers * sizeof(struct enc_worker_param), "worker param list");
@@ -610,6 +616,7 @@ int enc_main(int argc, char **argv)
             }
             // set the params
             worker_params[wc].wbio = wbio;
+            worker_params[wc].first_stage_model = first_stage_model;
             worker_params[wc].buff = buff[wc];
             worker_params[wc].inl = inl;
             worker_params[wc].ctx = ctx;
@@ -631,6 +638,7 @@ int enc_main(int argc, char **argv)
         }
         OPENSSL_free(worker_params);
         OPENSSL_free(workers);
+        BIO_free(temp);
     }
 
     ret = 0;
@@ -660,10 +668,10 @@ int enc_main(int argc, char **argv)
 
 static void *enc_write_worker(void *param) {
     struct enc_worker_param *p = (struct enc_worker_param*) param;
-    BIO *temp = BIO_new(BIO_s_mem());
+    BIO *first_stage = BIO_dup_chain(p->first_stage_model);
     
     // Encrypt
-    if (BIO_write(temp, (char *)p->buff, p->inl) != p->inl) {
+    if (BIO_write(first_stage, (char *)p->buff, p->inl) != p->inl) {
         BIO_printf(bio_err, "error writing temp memory\n");
         p->err = 1;
     }
@@ -678,7 +686,7 @@ static void *enc_write_worker(void *param) {
     // Write results
     if (!p->err) {
         char *out_data;
-        long outl = BIO_get_mem_data(temp, &out_data);
+        long outl = BIO_get_mem_data(first_stage, &out_data);
         if (BIO_write(p->wbio, out_data, outl) != outl) {
             BIO_printf(bio_err, "error writing output\n");
             p->err = 1;
@@ -691,7 +699,7 @@ static void *enc_write_worker(void *param) {
     pthread_mutex_unlock(&parallel_condition_mutex);
     pthread_cond_broadcast(&parallel_condition_cond);
     
-    BIO_free(temp);
+    BIO_free(first_stage);
     PERF_CTR_MARK(p->perf_counter, p->inl);
 }
 
