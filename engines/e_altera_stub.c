@@ -409,9 +409,9 @@ int altera_stub_aes_cipher_inner(EVP_CIPHER_CTX *ctx,
                            (uint8_t*) out,
                            NULL, NULL);
 
-    if (is_final) {
+    /*if (is_final) {
         OpenCLEnv_perf_begin_event(global_env);  // reset timer again in order to visualize idle times
-    }
+    }*/
 
     if (data->must_update_iv) {
         opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
@@ -419,8 +419,14 @@ int altera_stub_aes_cipher_inner(EVP_CIPHER_CTX *ctx,
     return inl;
 }
 
+int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
+                                 unsigned char *out,
+                                 const unsigned char *in,
+                                 size_t inl) {
+    altera_stub_aes_cipher_inner(ctx, out, in, inl, 0);
+}
 
-// Since aes is a custom cipher, we have to implement a couple of EVP_* functions
+// If aes is a custom cipher, we have to implement a couple of EVP_* functions
 // by ourselves
 // the best way to do it is copying them
 // (see openssl/crypto/evp/evp_enc.c)
@@ -639,7 +645,7 @@ int altera_stub_aes_decrypt_final(EVP_CIPHER_CTX *ctx,
 }
 
 
-int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
+int altera_stub_aes_cipher_outer(EVP_CIPHER_CTX *ctx,
                            unsigned char *out,
                            const unsigned char *in,
                            size_t inl) \

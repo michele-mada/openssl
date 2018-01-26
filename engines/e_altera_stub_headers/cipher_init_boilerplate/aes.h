@@ -16,6 +16,8 @@ typedef struct {
     } stream;
 } EVP_OPENCL_AES_KEY;
 
+#define ALTERA_STUB_AES_GLOBAL_FLAGS (EVP_CIPH_FLAG_DEFAULT_ASN1)
+
 // TODO: test flag EVP_CIPH_FLAG_PIPELINE
 
 // guards critical cipher primitives (setting key/iv)
@@ -32,9 +34,8 @@ static const EVP_CIPHER *altera_stub_aes_128_ecb(void)
                                                        16 /* key len */)) == NULL
             || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_128_ecb, 16)
             || !EVP_CIPHER_meth_set_flags(_hidden_aes_128_ecb,
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1
-                                          | EVP_CIPH_ECB_MODE
-                                          | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+                                          ALTERA_STUB_AES_GLOBAL_FLAGS
+                                          | EVP_CIPH_ECB_MODE)
             || !EVP_CIPHER_meth_set_init(_hidden_aes_128_ecb,
                                          altera_stub_aes_128_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_128_ecb,
@@ -57,9 +58,8 @@ static const EVP_CIPHER *altera_stub_aes_192_ecb(void)
                                                        24 /* key len */)) == NULL
             || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_192_ecb, 16)
             || !EVP_CIPHER_meth_set_flags(_hidden_aes_192_ecb,
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1
-                                          | EVP_CIPH_ECB_MODE
-                                          | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+                                          ALTERA_STUB_AES_GLOBAL_FLAGS
+                                          | EVP_CIPH_ECB_MODE)
             || !EVP_CIPHER_meth_set_init(_hidden_aes_192_ecb,
                                          altera_stub_aes_192_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_192_ecb,
@@ -82,9 +82,8 @@ static const EVP_CIPHER *altera_stub_aes_256_ecb(void)
                                                        32 /* key len */)) == NULL
             || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_256_ecb, 16)
             || !EVP_CIPHER_meth_set_flags(_hidden_aes_256_ecb,
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1
-                                          | EVP_CIPH_ECB_MODE
-                                          | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+                                          ALTERA_STUB_AES_GLOBAL_FLAGS
+                                          | EVP_CIPH_ECB_MODE)
             || !EVP_CIPHER_meth_set_init(_hidden_aes_256_ecb,
                                          altera_stub_aes_256_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_256_ecb,
@@ -110,9 +109,8 @@ static const EVP_CIPHER *altera_stub_aes_128_ctr(void)
                                                        16 /* key len */)) == NULL
             || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_128_ctr, 16)
             || !EVP_CIPHER_meth_set_flags(_hidden_aes_128_ctr,
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1
-                                          | EVP_CIPH_CTR_MODE
-                                          | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+                                          ALTERA_STUB_AES_GLOBAL_FLAGS
+                                          | EVP_CIPH_CTR_MODE)
             || !EVP_CIPHER_meth_set_init(_hidden_aes_128_ctr,
                                          altera_stub_aes_128_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_128_ctr,
@@ -135,9 +133,8 @@ static const EVP_CIPHER *altera_stub_aes_192_ctr(void)
                                                        24 /* key len */)) == NULL
             || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_192_ctr, 16)
             || !EVP_CIPHER_meth_set_flags(_hidden_aes_192_ctr,
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1
-                                          | EVP_CIPH_CTR_MODE
-                                          | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+                                          ALTERA_STUB_AES_GLOBAL_FLAGS
+                                          | EVP_CIPH_CTR_MODE)
             || !EVP_CIPHER_meth_set_init(_hidden_aes_192_ctr,
                                          altera_stub_aes_192_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_192_ctr,
@@ -160,9 +157,8 @@ static const EVP_CIPHER *altera_stub_aes_256_ctr(void)
                                                        32 /* key len */)) == NULL
             || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_256_ctr, 16)
             || !EVP_CIPHER_meth_set_flags(_hidden_aes_256_ctr,
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1
-                                          | EVP_CIPH_CTR_MODE
-                                          | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+                                          ALTERA_STUB_AES_GLOBAL_FLAGS
+                                          | EVP_CIPH_CTR_MODE)
             || !EVP_CIPHER_meth_set_init(_hidden_aes_256_ctr,
                                          altera_stub_aes_256_init_key)
             || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_256_ctr,
