@@ -49,15 +49,18 @@ static void savefile_worker(void *owner) {
         pthread_mutex_lock(&(perf_counter->save_mutex));
 
         struct timespec difference;
-        timespec_diff(&(perf_counter->time_start), &(perf_counter->time_last_sample), &difference);
-
         double perf_measurement;
-        double delta_time = ((double)difference.tv_sec) +
-                            (((double)difference.tv_nsec) / 1000000000.0);
 
-        if (delta_time == 0) {
-            perf_measurement = 0;
+        if ((perf_counter->time_start.tv_sec == perf_counter->time_last_sample.tv_sec) &&
+            (perf_counter->time_start.tv_nsec == perf_counter->time_last_sample.tv_nsec)) {
+
+            perf_measurement = 0.0;
         } else {
+            timespec_diff(&(perf_counter->time_start), &(perf_counter->time_last_sample), &difference);
+
+            double delta_time = ((double)difference.tv_sec) +
+                                (((double)difference.tv_nsec) / 1000000000.0);
+
             perf_measurement = (((double)perf_counter->accumulator_latch) / PERF_AMOUNT_DIVIDER) /
                                delta_time;
         }
@@ -75,7 +78,7 @@ static void PerfCounter_start(PerfCounter* perf_counter) {
     pthread_mutex_lock(&(perf_counter->save_mutex));
     perf_counter->accumulator = 0;
     clock_gettime(CLOCK_MONOTONIC, &(perf_counter->time_start));
-    clock_gettime(CLOCK_MONOTONIC, &(perf_counter->time_last_sample));
+    perf_counter->time_last_sample = perf_counter->time_start;
     pthread_mutex_unlock(&(perf_counter->save_mutex));
 }
 

@@ -31,18 +31,34 @@
 #define SIZE    (512)
 #define BSIZE   (8*1024)
 
+#define DEFAULT_NUM_PARALLEL_WORKERS 4
+
 static int set_hex(char *in, unsigned char *out, int size);
 static void show_ciphers(const OBJ_NAME *name, void *bio_);
+static void *enc_write_worker(void *param);
 
 struct doall_enc_ciphers {
     BIO *bio;
     int n;
 };
 
+struct enc_worker_param {
+    unsigned char *buff;
+    BIO *wbio;
+    int inl;
+    int err;
+    long blockid;
+    EVP_CIPHER_CTX *ctx;
+    PerfCounter *perf_counter;
+};
+static long parallel_last_written_block;
+pthread_mutex_t parallel_condition_mutex;
+pthread_cond_t  parallel_condition_cond;
+
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_LIST,
-    OPT_E, OPT_IN, OPT_OUT, OPT_PASS, OPT_ENGINE, OPT_D, OPT_P, OPT_V,
+    OPT_E, OPT_IN, OPT_OUT, OPT_PASS, OPT_ENGINE, OPT_D, OPT_P, OPT_V, OPT_PARALLEL,
     OPT_NOPAD, OPT_SALT, OPT_NOSALT, OPT_DEBUG, OPT_UPPER_P, OPT_UPPER_A,
     OPT_A, OPT_Z, OPT_BUFSIZE, OPT_K, OPT_KFILE, OPT_UPPER_K, OPT_NONE,
     OPT_UPPER_S, OPT_IV, OPT_MD, OPT_CIPHER
@@ -59,6 +75,7 @@ const OPTIONS enc_options[] = {
     {"p", OPT_P, '-', "Print the iv/key"},
     {"P", OPT_UPPER_P, '-', "Print the iv/key and exit"},
     {"v", OPT_V, '-', "Verbose output"},
+    {"parallel", OPT_PARALLEL, '-', "Run the cipher in multiple parallel instances"},
     {"nopad", OPT_NOPAD, '-', "Disable standard block padding"},
     {"salt", OPT_SALT, '-', "Use salt in the KDF (default)"},
     {"nosalt", OPT_NOSALT, '-', "Do not use salt in the KDF"},
@@ -104,8 +121,12 @@ int enc_main(int argc, char **argv)
     int enc = 1, printkey = 0, i, k;
     int base64 = 0, informat = FORMAT_BINARY, outformat = FORMAT_BINARY;
     int ret = 1, inl, nopad = 0;
+    int parallel = 0, num_parallel_workers = 1, wc, pwc;
+    pthread_t *workers;
+    struct enc_worker_param *worker_params;
+    long para_block_id;
     unsigned char key[EVP_MAX_KEY_LENGTH], iv[EVP_MAX_IV_LENGTH];
-    unsigned char *buff = NULL, salt[PKCS5_SALT_LEN];
+    unsigned char **buff = NULL, salt[PKCS5_SALT_LEN];
     long n;
     struct doall_enc_ciphers dec;
 #ifdef ZLIB
@@ -196,6 +217,10 @@ int enc_main(int argc, char **argv)
             break;
         case OPT_A:
             base64 = 1;
+            break;
+        case OPT_PARALLEL:
+            parallel = 1;
+            num_parallel_workers = DEFAULT_NUM_PARALLEL_WORKERS;
             break;
         case OPT_Z:
 #ifdef ZLIB
@@ -292,7 +317,10 @@ int enc_main(int argc, char **argv)
         }
 
     strbuf = app_malloc(SIZE, "strbuf");
-    buff = app_malloc(EVP_ENCODE_LENGTH(bsize), "evp buffer");
+    buff = app_malloc(num_parallel_workers * sizeof(char*), "evp buffer list");
+    for (wc = 0; wc < num_parallel_workers; wc++) {
+        buff[wc] = app_malloc(EVP_ENCODE_LENGTH(bsize), "evp buffer");
+    }
 
     perf_counter = PerfCounter_create_auto();
 
@@ -538,22 +566,71 @@ int enc_main(int argc, char **argv)
     /* Only encrypt/decrypt as we write the file */
     if (benc != NULL)
         wbio = BIO_push(benc, wbio);
-
+    
     PERF_CTR_START(perf_counter);
-
-    for (;;) {
-        inl = BIO_read(rbio, (char *)buff, bsize);
-        if (inl <= 0)
-            break;
-        if (BIO_write(wbio, (char *)buff, inl) != inl) {
-            BIO_printf(bio_err, "error writing output file\n");
+    if (!parallel) {
+        for (;;) {
+            inl = BIO_read(rbio, (char *)buff[0], bsize);
+            if (inl <= 0)
+                break;
+            if (BIO_write(wbio, (char *)buff[0], inl) != inl) {
+                BIO_printf(bio_err, "error writing output file\n");
+                goto end;
+            }
+            PERF_CTR_MARK(perf_counter, inl);
+        }
+        if (!BIO_flush(wbio)) {
+            BIO_printf(bio_err, "bad decrypt\n");
             goto end;
         }
-        PERF_CTR_MARK(perf_counter, inl);
     }
-    if (!BIO_flush(wbio)) {
-        BIO_printf(bio_err, "bad decrypt\n");
-        goto end;
+    else {
+        // prepare worker & param lists
+        workers = (pthread_t*) app_malloc(num_parallel_workers * sizeof(pthread_t), "worker list");
+        worker_params = (struct enc_worker_param*) app_malloc(num_parallel_workers * sizeof(struct enc_worker_param), "worker param list");
+        
+        pthread_cond_init(&parallel_condition_cond, NULL);
+        pthread_mutex_init(&parallel_condition_mutex, NULL);
+        
+        para_block_id = 0;
+        parallel_last_written_block = -1;
+        while (1) {
+            wc = para_block_id % num_parallel_workers;  // set the worker counter
+            
+            if (para_block_id >= num_parallel_workers) { // wait for the previous instance to terminate
+                pthread_join(workers[wc], NULL);
+                if (worker_params[wc].err) { // handle error in previous instance
+                    break;
+                }
+            }
+            // read input normally
+            inl = BIO_read(rbio, (char *)buff[wc], bsize);
+            if (inl <= 0) {
+                break;
+            }
+            // set the params
+            worker_params[wc].wbio = wbio;
+            worker_params[wc].buff = buff[wc];
+            worker_params[wc].inl = inl;
+            worker_params[wc].ctx = ctx;
+            worker_params[wc].err = 0;
+            worker_params[wc].blockid = para_block_id;
+            worker_params[wc].perf_counter = perf_counter;
+            pthread_create(workers + wc, NULL, &enc_write_worker, (void*) (worker_params + wc));
+            
+            para_block_id++;
+        }
+        
+        if (para_block_id >= num_parallel_workers) {
+            wc = num_parallel_workers;
+        } else {
+            wc = para_block_id % num_parallel_workers;
+        }
+        for (pwc=0; pwc<wc; pwc++) {
+            pthread_join(workers[pwc], NULL);
+        }
+        OPENSSL_free(worker_params);
+        OPENSSL_free(workers);
     }
 
     ret = 0;
@@ -565,6 +642,9 @@ int enc_main(int argc, char **argv)
     PERF_CTR_DESTROY(perf_counter);
     ERR_print_errors(bio_err);
     OPENSSL_free(strbuf);
+    for (wc = 0; wc < num_parallel_workers; wc++) {
+        OPENSSL_free(buff[wc]);
+    }
     OPENSSL_free(buff);
     BIO_free(in);
     BIO_free_all(out);
@@ -576,6 +656,43 @@ int enc_main(int argc, char **argv)
     release_engine(e);
     OPENSSL_free(pass);
     return (ret);
+}
+
+static void *enc_write_worker(void *param) {
+    struct enc_worker_param *p = (struct enc_worker_param*) param;
+    BIO *temp = BIO_new(BIO_s_mem());
+    
+    // Encrypt
+    if (BIO_write(temp, (char *)p->buff, p->inl) != p->inl) {
+        BIO_printf(bio_err, "error writing output temp memory\n");
+        p->err = 1;
+    }
+    
+    // wait before committing the results
+    pthread_mutex_lock(&parallel_condition_mutex);
+    while (parallel_last_written_block+1 < p->blockid) {
+        pthread_cond_wait(&parallel_condition_cond, &parallel_condition_mutex);
+    }
+    pthread_mutex_unlock(&parallel_condition_mutex);
+    
+    // Write results
+    if (!p->err) {
+        char *out_data;
+        long outl = BIO_get_mem_data(temp, &out_data);
+        if (BIO_write(p->wbio, out_data, outl) != outl) {
+            BIO_printf(bio_err, "error writing output temp memory\n");
+            p->err = 1;
+        }
+    }
+    
+    // notify all the other threads
+    pthread_mutex_lock(&parallel_condition_mutex);
+    parallel_last_written_block = p->blockid;
+    pthread_mutex_unlock(&parallel_condition_mutex);
+    pthread_cond_broadcast(&parallel_condition_cond);
+    
+    BIO_free(temp);
+    PERF_CTR_MARK(p->perf_counter, p->inl);
 }
 
 static void show_ciphers(const OBJ_NAME *name, void *arg)

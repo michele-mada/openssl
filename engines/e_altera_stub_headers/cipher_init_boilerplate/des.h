@@ -12,6 +12,8 @@ typedef struct {
     } stream;
 } EVP_OPENCL_DES_KEY;
 
+static pthread_mutex_t altera_stub_des_mutex;
+
 static EVP_CIPHER *_hidden_des_ecb = NULL;
 static const EVP_CIPHER *altera_stub_des_ecb(void)
 {
