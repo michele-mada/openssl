@@ -671,17 +671,20 @@ static void *enc_write_worker(void *param) {
     BIO *first_stage = BIO_dup_chain(p->first_stage_model);
     
     // Encrypt
+    fprintf(stderr, "computing block %d\n", p->blockid);
     if (BIO_write(first_stage, (char *)p->buff, p->inl) != p->inl) {
         BIO_printf(bio_err, "error writing temp memory\n");
         p->err = 1;
     }
     
     // wait before committing the results
+    fprintf(stderr, "block %d awaiting write\n", p->blockid);
     pthread_mutex_lock(&parallel_condition_mutex);
     while (parallel_last_written_block+1 < p->blockid) {
         pthread_cond_wait(&parallel_condition_cond, &parallel_condition_mutex);
     }
     pthread_mutex_unlock(&parallel_condition_mutex);
+    fprintf(stderr, "block %d write unlocked\n", p->blockid);
     
     // Write results
     if (!p->err) {
@@ -698,6 +701,7 @@ static void *enc_write_worker(void *param) {
     parallel_last_written_block = p->blockid;
     pthread_mutex_unlock(&parallel_condition_mutex);
     pthread_cond_broadcast(&parallel_condition_cond);
+    fprintf(stderr, "block %d broadcasted completion\n", p->blockid);
     
     BIO_free(first_stage);
     PERF_CTR_MARK(p->perf_counter, p->inl);
