@@ -228,6 +228,7 @@ static int mem_write(BIO *b, const char *in, int inl)
     *bbm->readp = *bbm->buf;
     ret = inl;
  end:
+    fprintf(stderr, "written %dB to mem bio\n", inl);
     return (ret);
 }
 
