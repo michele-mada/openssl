@@ -588,8 +588,7 @@ int enc_main(int argc, char **argv)
         }
     }
     else {
-        BIO *temp = BIO_new(BIO_s_mem());
-        BIO *first_stage_model = BIO_push(benc, temp);
+        BIO *first_stage_model = benc;
         
         // prepare worker & param lists
         workers = (pthread_t*) app_malloc(num_parallel_workers * sizeof(pthread_t), "worker list");
@@ -638,7 +637,6 @@ int enc_main(int argc, char **argv)
         }
         OPENSSL_free(worker_params);
         OPENSSL_free(workers);
-        BIO_free(temp);
     }
 
     ret = 0;
@@ -668,7 +666,10 @@ int enc_main(int argc, char **argv)
 
 static void *enc_write_worker(void *param) {
     struct enc_worker_param *p = (struct enc_worker_param*) param;
-    BIO *first_stage = BIO_dup_chain(p->first_stage_model);
+    char *data = aligned_alloc(64, p->inl);
+    BIO *mem = BIO_new_mem_buf(data, 0);
+    BIO *benc = BIO_dup_chain(p->first_stage_model);
+    BIO *first_stage = BIO_push(benc, mem);
     
     // Encrypt
     fprintf(stderr, "computing block %d\n", p->blockid);
