@@ -699,8 +699,8 @@ static void *enc_write_worker(void *param) {
     // notify all the other threads
     pthread_mutex_lock(&parallel_condition_mutex);
     parallel_last_written_block = p->blockid;
-    pthread_mutex_unlock(&parallel_condition_mutex);
     pthread_cond_broadcast(&parallel_condition_cond);
+    pthread_mutex_unlock(&parallel_condition_mutex);
     fprintf(stderr, "block %d broadcasted completion\n", p->blockid);
     
     BIO_free(first_stage);
