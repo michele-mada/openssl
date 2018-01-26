@@ -409,9 +409,9 @@ int altera_stub_aes_cipher_inner(EVP_CIPHER_CTX *ctx,
                            (uint8_t*) out,
                            NULL, NULL);
 
-    /*if (is_final) {
+    if (is_final) {
         OpenCLEnv_perf_begin_event(global_env);  // reset timer again in order to visualize idle times
-    }*/
+    }
 
     if (data->must_update_iv) {
         opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
