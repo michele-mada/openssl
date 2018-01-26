@@ -664,7 +664,7 @@ static void *enc_write_worker(void *param) {
     
     // Encrypt
     if (BIO_write(temp, (char *)p->buff, p->inl) != p->inl) {
-        BIO_printf(bio_err, "error writing output temp memory\n");
+        BIO_printf(bio_err, "error writing temp memory\n");
         p->err = 1;
     }
     
@@ -680,7 +680,7 @@ static void *enc_write_worker(void *param) {
         char *out_data;
         long outl = BIO_get_mem_data(temp, &out_data);
         if (BIO_write(p->wbio, out_data, outl) != outl) {
-            BIO_printf(bio_err, "error writing output temp memory\n");
+            BIO_printf(bio_err, "error writing output\n");
             p->err = 1;
         }
     }
