@@ -763,6 +763,7 @@ static void *block_write_worker(void *param) {
         }
         
         BIO_get_mem_data(mem, &out_data);
+        sem_post(&writer_resource);
         if (BIO_write(p->wbio, out_data, inl) != inl) {
             p->err = 1;
             BIO_printf(bio_err, "error writing output file\n");
@@ -772,7 +773,6 @@ static void *block_write_worker(void *param) {
                          // that flushing rewinds the memory without zeroing (as reset would instead do)
         
         //fprintf(stderr, "[write worker] done writing %d\n", blockid);
-        sem_post(&writer_resource);
     }
     //fprintf(stderr, "[write worker] stopped\n");
 }
