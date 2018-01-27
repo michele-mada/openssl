@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <semaphore.h>
 #include "apps.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -31,30 +32,42 @@
 #define SIZE    (512)
 #define BSIZE   (8*1024)
 
-#define DEFAULT_NUM_PARALLEL_WORKERS 4
+#define NUM_PARALLEL_BUFFERS 2
 
 static int set_hex(char *in, unsigned char *out, int size);
 static void show_ciphers(const OBJ_NAME *name, void *bio_);
-static void *enc_write_worker(void *param);
+
+static void *block_read_worker(void *param);
+static void *block_write_worker(void *param);
 
 struct doall_enc_ciphers {
     BIO *bio;
     int n;
 };
 
-struct enc_worker_param {
-    unsigned char *buff;
-    BIO *wbio;
-    BIO *first_stage_model;
+struct block_read_worker_param {
+    char *buff;
+    char **multibuff;
+    BIO *rbio;
+    long blockid;
+    int bsize;
     int inl;
     int err;
-    long blockid;
-    EVP_CIPHER_CTX *ctx;
-    PerfCounter *perf_counter;
 };
-static long parallel_last_written_block;
-pthread_mutex_t parallel_condition_mutex;
-pthread_cond_t  parallel_condition_cond;
+
+struct block_write_worker_param {
+    BIO *wbio;
+    BIO *mem_bio;
+    long blockid;
+    int inl;
+    int err;
+};
+
+static sem_t input_resource;
+static sem_t processor_resource;
+static sem_t payload_resource;
+static sem_t writer_resource;
+
 
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
@@ -122,12 +135,10 @@ int enc_main(int argc, char **argv)
     int enc = 1, printkey = 0, i, k;
     int base64 = 0, informat = FORMAT_BINARY, outformat = FORMAT_BINARY;
     int ret = 1, inl, nopad = 0;
-    int parallel = 0, num_parallel_workers = 1, wc, pwc;
-    pthread_t *workers;
-    struct enc_worker_param *worker_params;
+    int parallel = 0, wc, pwc;
     long para_block_id;
     unsigned char key[EVP_MAX_KEY_LENGTH], iv[EVP_MAX_IV_LENGTH];
-    unsigned char **buff = NULL, salt[PKCS5_SALT_LEN];
+    unsigned char *buff[NUM_PARALLEL_BUFFERS], salt[PKCS5_SALT_LEN];
     long n;
     struct doall_enc_ciphers dec;
 #ifdef ZLIB
@@ -221,7 +232,6 @@ int enc_main(int argc, char **argv)
             break;
         case OPT_PARALLEL:
             parallel = 1;
-            num_parallel_workers = DEFAULT_NUM_PARALLEL_WORKERS;
             break;
         case OPT_Z:
 #ifdef ZLIB
@@ -318,8 +328,7 @@ int enc_main(int argc, char **argv)
         }
 
     strbuf = app_malloc(SIZE, "strbuf");
-    buff = app_malloc(num_parallel_workers * sizeof(char*), "evp buffer list");
-    for (wc = 0; wc < num_parallel_workers; wc++) {
+    for (wc = 0; wc < NUM_PARALLEL_BUFFERS; wc++) {
         buff[wc] = app_malloc(EVP_ENCODE_LENGTH(bsize), "evp buffer");
     }
 
@@ -588,55 +597,99 @@ int enc_main(int argc, char **argv)
         }
     }
     else {
-        BIO *first_stage_model = benc;
+        pthread_t read_worker, write_worker;
+        BIO *mem[NUM_PARALLEL_BUFFERS];
+        for (wc = 0; wc < NUM_PARALLEL_BUFFERS; wc++) {
+            mem[wc] = BIO_new(BIO_s_mem());
+        }
+        BIO *process_stage;
         
-        // prepare worker & param lists
-        workers = (pthread_t*) app_malloc(num_parallel_workers * sizeof(pthread_t), "worker list");
-        worker_params = (struct enc_worker_param*) app_malloc(num_parallel_workers * sizeof(struct enc_worker_param), "worker param list");
+        // Memory areas for fast inter-thread communication
+        struct block_read_worker_param r_param = {
+            .buff = NULL,
+            .multibuff = buff,
+            .rbio = rbio,
+            .blockid = 0,
+            .err = 0,
+            .bsize = bsize,
+        };
+
+        struct block_write_worker_param w_param = {
+            .wbio = wbio,
+            .mem_bio = mem[0],
+            .inl = 0,
+            .err = 0,
+        };
         
-        pthread_cond_init(&parallel_condition_cond, NULL);
-        pthread_mutex_init(&parallel_condition_mutex, NULL);
+        // Resources (used for synchronization)
+        sem_init(&input_resource, 0, 0);
+        sem_init(&processor_resource, 0, 1);
+        sem_init(&payload_resource, 0, 0);
+        sem_init(&writer_resource, 0, 1);
         
-        para_block_id = 0;
-        parallel_last_written_block = -1;
-        while (1) {
-            wc = para_block_id % num_parallel_workers;  // set the worker counter
+        // Start worker threads
+        pthread_create(&read_worker, NULL, &block_read_worker, (void*) &r_param);
+        pthread_create(&write_worker, NULL, &block_write_worker, (void*) &w_param);
+        
+        // Local state variables
+        char *single_buff;
+        long blockid;
+        int err, inl;
+        for (;;) {
+            // wait for data from the reader
+            sem_wait(&input_resource);
+            blockid = r_param.blockid;
+            single_buff = r_param.buff;
+            err = r_param.err;
+            inl = r_param.inl;
             
-            if (para_block_id >= num_parallel_workers) { // wait for the previous instance to terminate
-                pthread_join(workers[wc], NULL);
-                if (worker_params[wc].err) { // handle error in previous instance
-                    break;
-                }
-            }
-            // read input normally
-            inl = BIO_read(rbio, (char *)buff[wc], bsize);
-            if (inl <= 0) {
+            if (err) {  // error from the reader
+                //fprintf(stderr, "[main] got error flag from reader\n");
+                // kill the writer and stop
+                sem_wait(&writer_resource);
+                w_param.inl = 0;
+                sem_post(&payload_resource);
                 break;
             }
-            // set the params
-            worker_params[wc].wbio = wbio;
-            worker_params[wc].first_stage_model = first_stage_model;
-            worker_params[wc].buff = buff[wc];
-            worker_params[wc].inl = inl;
-            worker_params[wc].ctx = ctx;
-            worker_params[wc].err = 0;
-            worker_params[wc].blockid = para_block_id;
-            worker_params[wc].perf_counter = perf_counter;
-            pthread_create(workers + wc, NULL, &enc_write_worker, (void*) (worker_params + wc));
             
-            para_block_id++;
+            // don't clone the bio cipher, but rather swap it between chains
+            process_stage = BIO_push(benc, mem[blockid % NUM_PARALLEL_BUFFERS]);
+            //fprintf(stderr, "[main] start encrypting block %d (%d)\n", blockid, single_buff[0]);
+            if (BIO_write(process_stage, single_buff, inl) != inl) {  // error from the engine
+                BIO_printf(bio_err, "error writing memory buffer\n");
+                // kill the writer and stop
+                sem_wait(&writer_resource);
+                w_param.inl = 0;
+                sem_post(&payload_resource);
+                break;
+            }
+            //fprintf(stderr, "[main] done encrypting block %d\n", blockid);
+            BIO_pop(process_stage);  // pop out the bio cipher for re-use
+            sem_post(&processor_resource);  // the processor thread is available for more processing
+            
+            sem_wait(&writer_resource);
+            w_param.mem_bio = mem[blockid % NUM_PARALLEL_BUFFERS];
+            w_param.inl = inl;
+            w_param.blockid = blockid;
+            sem_post(&payload_resource);
+            
+            if (w_param.err) {
+                // Error in the writer: just stop
+                break;
+            }
+            
+            PERF_CTR_MARK(perf_counter, inl);
         }
         
-        if (para_block_id >= num_parallel_workers) {
-            wc = num_parallel_workers;
-        } else {
-            wc = para_block_id % num_parallel_workers;
+        if (!BIO_flush(wbio)) {
+            BIO_printf(bio_err, "bad decrypt\n");
+            goto end;
         }
-        for (pwc=0; pwc<wc; pwc++) {
-            pthread_join(workers[pwc], NULL);
+        
+        for (wc = 0; wc < NUM_PARALLEL_BUFFERS; wc++) {
+            BIO_free(mem[wc]);
         }
-        OPENSSL_free(worker_params);
-        OPENSSL_free(workers);
+        
     }
 
     ret = 0;
@@ -648,10 +701,9 @@ int enc_main(int argc, char **argv)
     PERF_CTR_DESTROY(perf_counter);
     ERR_print_errors(bio_err);
     OPENSSL_free(strbuf);
-    for (wc = 0; wc < num_parallel_workers; wc++) {
+    for (wc = 0; wc < NUM_PARALLEL_BUFFERS; wc++) {
         OPENSSL_free(buff[wc]);
     }
-    OPENSSL_free(buff);
     BIO_free(in);
     BIO_free_all(out);
     BIO_free(benc);
@@ -664,47 +716,63 @@ int enc_main(int argc, char **argv)
     return (ret);
 }
 
-static void *enc_write_worker(void *param) {
-    struct enc_worker_param *p = (struct enc_worker_param*) param;
-    BIO *mem = BIO_new(BIO_s_mem());
-    BIO *benc = BIO_dup_chain(p->first_stage_model);
-    BIO *first_stage = BIO_push(benc, mem);
+static void *block_read_worker(void *param) {
+    struct block_read_worker_param *p = (struct block_read_worker_param*) param;
+    //fprintf(stderr, "[read worker] started\n");
+    int inl;
+    long blockid = p->blockid;
+    char **multibuff = p->multibuff;
+    while (!p->err) {
     
-    // Encrypt
-    fprintf(stderr, "computing block %d\n", p->blockid);
-    if (BIO_write(first_stage, (char *)p->buff, p->inl) != p->inl) {
-        BIO_printf(bio_err, "error writing temp memory\n");
-        p->err = 1;
-    }
-    
-    // wait before committing the results
-    fprintf(stderr, "block %d awaiting write\n", p->blockid);
-    pthread_mutex_lock(&parallel_condition_mutex);
-    while (parallel_last_written_block+1 < p->blockid) {
-        pthread_cond_wait(&parallel_condition_cond, &parallel_condition_mutex);
-    }
-    pthread_mutex_unlock(&parallel_condition_mutex);
-    fprintf(stderr, "block %d write unlocked\n", p->blockid);
-    
-    // Write results
-    if (!p->err) {
-        char *out_data;
-        long outl = BIO_get_mem_data(first_stage, &out_data);
-        if (BIO_write(p->wbio, out_data, outl) != outl) {
-            BIO_printf(bio_err, "error writing output\n");
+        inl = BIO_read(p->rbio, multibuff[blockid % NUM_PARALLEL_BUFFERS], p->bsize);
+        //fprintf(stderr, "[read worker] done reading blockid %d\n", blockid);
+        
+        sem_wait(&processor_resource);
+        if (inl <= 0) {
             p->err = 1;
+            //fprintf(stderr, "[read worker] set error flag\n");
         }
+        p->inl = inl;
+        p->buff = multibuff[blockid % NUM_PARALLEL_BUFFERS];
+        p->blockid = blockid;
+        sem_post(&input_resource);
+        
+        //fprintf(stderr, "[read worker] done signaling blockid %d (%d)\n", blockid, p->buff[0]);
+        blockid++;
     }
-    
-    // notify all the other threads
-    pthread_mutex_lock(&parallel_condition_mutex);
-    parallel_last_written_block = p->blockid;
-    pthread_mutex_unlock(&parallel_condition_mutex);
-    pthread_cond_broadcast(&parallel_condition_cond);
-    fprintf(stderr, "block %d broadcasted completion\n", p->blockid);
-    
-    BIO_free(first_stage);
-    PERF_CTR_MARK(p->perf_counter, p->inl);
+    //fprintf(stderr, "[read worker] stopped\n");
+}
+
+static void *block_write_worker(void *param) {
+    struct block_write_worker_param *p = (struct block_write_worker_param*) param;
+    int inl = 1;
+    long blockid;
+    BIO *mem;
+    char *out_data;
+    //fprintf(stderr, "[write worker] started\n");
+    while (inl > 0) {
+        sem_wait(&payload_resource);
+        mem = p->mem_bio;
+        inl = p->inl;
+        blockid = p->blockid;
+        //fprintf(stderr, "[write worker] signaled block %d\n", blockid);
+        
+        if (inl <= 0) {
+            //fprintf(stderr, "[write worker] nothing to write\n");
+            break;
+        }
+        
+        BIO_get_mem_data(mem, &out_data);
+        if (BIO_write(p->wbio, out_data, inl) != inl) {
+            p->err = 1;
+            BIO_printf(bio_err, "error writing output file\n");
+            break;
+        }
+        BIO_reset(mem);
+        //fprintf(stderr, "[write worker] done writing %d\n", blockid);
+        sem_post(&writer_resource);
+    }
+    //fprintf(stderr, "[write worker] stopped\n");
 }
 
 static void show_ciphers(const OBJ_NAME *name, void *arg)
