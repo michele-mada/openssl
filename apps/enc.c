@@ -63,6 +63,8 @@ struct block_write_worker_param {
     int err;
 };
 
+#define DISABLE_SEPARATE_WRITER
+
 static sem_t input_resource;
 static sem_t processor_resource;
 static sem_t payload_resource;
@@ -597,13 +599,17 @@ int enc_main(int argc, char **argv)
         }
     }
     else {
-        pthread_t read_worker, write_worker;
+        pthread_t read_worker;
+#ifndef DISABLE_SEPARATE_WRITER
+        pthread_t write_worker;
         BIO *mem[NUM_PARALLEL_BUFFERS];
         for (wc = 0; wc < NUM_PARALLEL_BUFFERS; wc++) {
             mem[wc] = BIO_new(BIO_s_mem());
         }
         BIO *process_stage;
-        
+#else
+        BIO *process_stage = BIO_push(benc, wbio);
+#endif
         // Memory areas for fast inter-thread communication
         struct block_read_worker_param r_param = {
             .buff = NULL,
@@ -613,23 +619,21 @@ int enc_main(int argc, char **argv)
             .err = 0,
             .bsize = bsize,
         };
+        sem_init(&input_resource, 0, 0);
+        sem_init(&processor_resource, 0, 1);
+        pthread_create(&read_worker, NULL, &block_read_worker, (void*) &r_param);
 
+#ifndef DISABLE_SEPARATE_WRITER
         struct block_write_worker_param w_param = {
             .wbio = wbio,
             .mem_bio = mem[0],
             .inl = 0,
             .err = 0,
         };
-        
-        // Resources (used for synchronization)
-        sem_init(&input_resource, 0, 0);
-        sem_init(&processor_resource, 0, 1);
         sem_init(&payload_resource, 0, 0);
         sem_init(&writer_resource, 0, 1);
-        
-        // Start worker threads
-        pthread_create(&read_worker, NULL, &block_read_worker, (void*) &r_param);
         pthread_create(&write_worker, NULL, &block_write_worker, (void*) &w_param);
+#endif
         
         // Local state variables
         char *single_buff;
@@ -646,25 +650,34 @@ int enc_main(int argc, char **argv)
             
             if (err) {  // error from the reader
                 //fprintf(stderr, "[main] got error flag from reader\n");
+#ifndef DISABLE_SEPARATE_WRITER
                 // kill the writer and stop
                 sem_wait(&writer_resource);
                 w_param.inl = 0;
                 sem_post(&payload_resource);
+#endif
                 break;
             }
             
+#ifndef DISABLE_SEPARATE_WRITER
             // don't clone the bio cipher, but rather swap it between chains
             process_stage = BIO_push(benc, mem[blockid % NUM_PARALLEL_BUFFERS]);
+#endif
             //fprintf(stderr, "[main] start encrypting block %d (%d)\n", blockid, single_buff[0]);
             if (BIO_write(process_stage, single_buff, inl) != inl) {  // error from the engine
+#ifndef DISABLE_SEPARATE_WRITER
                 BIO_printf(bio_err, "error writing memory buffer\n");
                 // kill the writer and stop
                 sem_wait(&writer_resource);
                 w_param.inl = 0;
                 sem_post(&payload_resource);
+#else
+                BIO_printf(bio_err, "error writing output file\n");
+#endif
                 break;
             }
             //fprintf(stderr, "[main] done encrypting block %d\n", blockid);
+#ifndef DISABLE_SEPARATE_WRITER
             BIO_pop(process_stage);  // pop out the bio cipher for re-use
             
             sem_wait(&writer_resource);
@@ -677,6 +690,7 @@ int enc_main(int argc, char **argv)
                 // Error in the writer: just stop
                 break;
             }
+#endif
             
             PERF_CTR_MARK(perf_counter, inl);
         }
@@ -686,9 +700,11 @@ int enc_main(int argc, char **argv)
             goto end;
         }
         
+#ifndef DISABLE_SEPARATE_WRITER
         for (wc = 0; wc < NUM_PARALLEL_BUFFERS; wc++) {
             BIO_free(mem[wc]);
         }
+#endif
         
     }
 
