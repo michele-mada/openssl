@@ -113,7 +113,6 @@ static int altera_stub_init(ENGINE *e) {
     if (custom_multiplier != NULL) {
         multiplier = atol(custom_multiplier);
     }
-    printf("%d = %d * %d\n", engine_block_size * multiplier, engine_block_size, multiplier);
     int status = ENGINE_set_enc_block_size(e, engine_block_size * multiplier);
     pthread_mutex_init(&altera_stub_aes_mutex, NULL);
     pthread_mutex_init(&altera_stub_des_mutex, NULL);
