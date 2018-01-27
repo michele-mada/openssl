@@ -629,14 +629,12 @@ int enc_main(int argc, char **argv)
         
         // Start worker threads
         pthread_create(&read_worker, NULL, &block_read_worker, (void*) &r_param);
-        //pthread_create(&write_worker, NULL, &block_write_worker, (void*) &w_param);
+        pthread_create(&write_worker, NULL, &block_write_worker, (void*) &w_param);
         
         // Local state variables
         char *single_buff;
         long blockid;
         int err, inl;
-        if (benc != NULL)
-            wbio = BIO_push(benc, wbio);
         for (;;) {
             // wait for data from the reader
             sem_wait(&input_resource);
@@ -648,29 +646,28 @@ int enc_main(int argc, char **argv)
             if (err) {  // error from the reader
                 //fprintf(stderr, "[main] got error flag from reader\n");
                 // kill the writer and stop
-                /*sem_wait(&writer_resource);
+                sem_wait(&writer_resource);
                 w_param.inl = 0;
-                sem_post(&payload_resource);*/
+                sem_post(&payload_resource);
                 break;
             }
             
             // don't clone the bio cipher, but rather swap it between chains
-            //process_stage = BIO_push(benc, mem[blockid % NUM_PARALLEL_BUFFERS]);
+            process_stage = BIO_push(benc, mem[blockid % NUM_PARALLEL_BUFFERS]);
             //fprintf(stderr, "[main] start encrypting block %d (%d)\n", blockid, single_buff[0]);
-            if (BIO_write(wbio, single_buff, inl) != inl) {  // error from the engine
-                BIO_printf(bio_err, "error writing output file\n");
-                //BIO_printf(bio_err, "error writing memory buffer\n");
+            if (BIO_write(process_stage, single_buff, inl) != inl) {  // error from the engine
+                BIO_printf(bio_err, "error writing memory buffer\n");
                 // kill the writer and stop
-                /*sem_wait(&writer_resource);
+                sem_wait(&writer_resource);
                 w_param.inl = 0;
-                sem_post(&payload_resource);*/
+                sem_post(&payload_resource);
                 break;
             }
             //fprintf(stderr, "[main] done encrypting block %d\n", blockid);
-            //BIO_pop(process_stage);  // pop out the bio cipher for re-use
+            BIO_pop(process_stage);  // pop out the bio cipher for re-use
             sem_post(&processor_resource);  // the processor thread is available for more processing
             
-            /*sem_wait(&writer_resource);
+            sem_wait(&writer_resource);
             w_param.mem_bio = mem[blockid % NUM_PARALLEL_BUFFERS];
             w_param.inl = inl;
             w_param.blockid = blockid;
@@ -679,7 +676,7 @@ int enc_main(int argc, char **argv)
             if (w_param.err) {
                 // Error in the writer: just stop
                 break;
-            }*/
+            }
             
             PERF_CTR_MARK(perf_counter, inl);
         }
