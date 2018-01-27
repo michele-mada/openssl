@@ -432,6 +432,7 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                                engine_block_size, &data->k,
                                (uint8_t*) (out + engine_block_size*i),
                                callback, user_data);
+        printf("burst #%d\n", i);
     }
     OpenCLEnv_toggle_burst_mode(global_env, 0);
     SETUP_AES_IV_CALLBACK(reminder);
@@ -440,5 +441,6 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                            reminder, &data->k,
                            (uint8_t*) (out + engine_block_size*blocks_in_burst),
                            callback, user_data);
+    OpenCLEnv_perf_begin_event(global_env);  // reset timer again in order to visualize idle times
     return inl;
 }
