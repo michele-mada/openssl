@@ -32,7 +32,7 @@
 #define SIZE    (512)
 #define BSIZE   (8*1024)
 
-#define NUM_PARALLEL_BUFFERS 2
+#define NUM_PARALLEL_BUFFERS 4
 
 static int set_hex(char *in, unsigned char *out, int size);
 static void show_ciphers(const OBJ_NAME *name, void *bio_);
