@@ -299,6 +299,15 @@ static long mem_ctrl(BIO *b, int cmd, long num, void *ptr)
     case BIO_CTRL_DUP:
     case BIO_CTRL_FLUSH:
         ret = 1;
+        bm = bbm->buf;
+        if (bm->data != NULL) {
+            if ((b->flags & BIO_FLAGS_MEM_RDONLY) || (b->flags & BIO_FLAGS_NONCLEAR_RST)) {
+                bm->length = bm->max;
+            } else {
+                bm->length = 0;
+            }
+            *bbm->readp = *bbm->buf;
+        }
         break;
     case BIO_CTRL_PUSH:
     case BIO_CTRL_POP:

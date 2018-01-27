@@ -768,7 +768,9 @@ static void *block_write_worker(void *param) {
             BIO_printf(bio_err, "error writing output file\n");
             break;
         }
-        BIO_reset(mem);
+        BIO_flush(mem);  // NOTE: this implementation of bss_mem is modified in such a way
+                         // that flushing rewinds the memory without zeroing (as reset would instead do)
+        
         //fprintf(stderr, "[write worker] done writing %d\n", blockid);
         sem_post(&writer_resource);
     }
