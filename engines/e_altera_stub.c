@@ -424,6 +424,7 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
     struct update_iv_callback_data *user_data;
     aes_callback_t callback;
 
+    OpenCLEnv_perf_begin_event(global_env); // The engine also has a standalone performance counter
     OpenCLEnv_toggle_burst_mode(global_env, 1);
     for (int i=0; i<blocks_in_burst; i++) {
         SETUP_AES_IV_CALLBACK(engine_block_size);
@@ -432,7 +433,6 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                                engine_block_size, &data->k,
                                (uint8_t*) (out + engine_block_size*i),
                                callback, user_data);
-        printf("burst #%d\n", i);
     }
     OpenCLEnv_toggle_burst_mode(global_env, 0);
     SETUP_AES_IV_CALLBACK(reminder);
