@@ -642,6 +642,7 @@ int enc_main(int argc, char **argv)
             single_buff = r_param.buff;
             err = r_param.err;
             inl = r_param.inl;
+            sem_post(&processor_resource);  // the processor thread is available for more processing
             
             if (err) {  // error from the reader
                 //fprintf(stderr, "[main] got error flag from reader\n");
@@ -665,7 +666,6 @@ int enc_main(int argc, char **argv)
             }
             //fprintf(stderr, "[main] done encrypting block %d\n", blockid);
             BIO_pop(process_stage);  // pop out the bio cipher for re-use
-            sem_post(&processor_resource);  // the processor thread is available for more processing
             
             sem_wait(&writer_resource);
             w_param.mem_bio = mem[blockid % NUM_PARALLEL_BUFFERS];
@@ -761,9 +761,9 @@ static void *block_write_worker(void *param) {
             //fprintf(stderr, "[write worker] nothing to write\n");
             break;
         }
+        sem_post(&writer_resource);
         
         BIO_get_mem_data(mem, &out_data);
-        sem_post(&writer_resource);
         if (BIO_write(p->wbio, out_data, inl) != inl) {
             p->err = 1;
             BIO_printf(bio_err, "error writing output file\n");
