@@ -113,6 +113,7 @@ static int altera_stub_init(ENGINE *e) {
     if (custom_multiplier != NULL) {
         multiplier = atol(custom_multiplier);
     }
+    printf("%d = %d * %d\n", engine_block_size * multiplier, engine_block_size, multiplier);
     int status = ENGINE_set_enc_block_size(e, engine_block_size * multiplier);
     pthread_mutex_init(&altera_stub_aes_mutex, NULL);
     pthread_mutex_init(&altera_stub_des_mutex, NULL);
@@ -384,6 +385,30 @@ int altera_stub_aes_256_init_key(EVP_CIPHER_CTX *ctx,
         return 1;
     })
 
+
+struct update_iv_callback_data {
+    EVP_OPENCL_AES_KEY *data;
+    size_t inl;
+};
+
+static void update_iv_callback(void *user_data) {
+    struct update_iv_callback_data *p = (struct update_iv_callback_data*) user_data;
+    opencl_aes_update_iv_after_chunk_processed(&p->data->k, p->inl);
+}
+
+#define SETUP_AES_IV_CALLBACK(inl_size) \
+{ \
+    if (data->must_update_iv) { \
+        callback = &update_iv_callback; \
+        user_data = (struct update_iv_callback_data*) malloc(sizeof(struct update_iv_callback_data)); \
+        user_data->data = data; \
+        user_data->inl = inl_size; \
+    } else { \
+        callback = NULL; \
+        user_data = NULL; \
+    } \
+}
+
 int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
                            unsigned char *out,
                            const unsigned char *in,
@@ -395,24 +420,26 @@ int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
     int blocks_in_burst = blocks_inbound;
     if (inl % engine_block_size == 0) blocks_in_burst--;  // no reminder: make a last non-burst block
 
-    size_t reminder = (blocks_in_burst*engine_block_size) - inl;
+    size_t reminder = inl - (blocks_in_burst*engine_block_size);
+
+    struct update_iv_callback_data *user_data;
+    aes_callback_t callback;
 
     OpenCLEnv_toggle_burst_mode(global_env, 1);
     for (int i=0; i<blocks_in_burst; i++) {
+        SETUP_AES_IV_CALLBACK(engine_block_size);
         (data->stream.cipher) (global_env,
                                (uint8_t*) (in + engine_block_size*i),
                                engine_block_size, &data->k,
-                               (uint8_t*) (out + engine_block_size*i));
+                               (uint8_t*) (out + engine_block_size*i),
+                               callback, user_data);
     }
     OpenCLEnv_toggle_burst_mode(global_env, 0);
+    SETUP_AES_IV_CALLBACK(reminder);
     (data->stream.cipher) (global_env,
                            (uint8_t*) (in + engine_block_size*blocks_in_burst),
                            reminder, &data->k,
-                           (uint8_t*) (out + engine_block_size*blocks_in_burst));
-
-    (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
-    if (data->must_update_iv) {
-        opencl_aes_update_iv_after_chunk_processed(&data->k, inl);
-    }
+                           (uint8_t*) (out + engine_block_size*blocks_in_burst),
+                           callback, user_data);
     return inl;
 }
