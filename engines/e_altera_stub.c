@@ -174,3 +174,23 @@ OMNI_SETUP_KEYING_IMPL(aes, aes_192, AES, 16);
 OMNI_SETUP_KEYING_IMPL(aes, aes_256, AES, 16);
 
 OMNI_SETUP_CIPHER_IMPL(aes, AES, 16);
+
+/* camellia implementation */
+
+OMNI_SETUP_KEYING_IMPL(camellia, camellia_128, CAMELLIA, 16);
+OMNI_SETUP_KEYING_IMPL(camellia, camellia_192, CAMELLIA, 16);
+OMNI_SETUP_KEYING_IMPL(camellia, camellia_256, CAMELLIA, 16);
+
+OMNI_SETUP_CIPHER_IMPL(camellia, CAMELLIA, 16);
+
+/* cast5 implementation */
+
+OMNI_SETUP_KEYING_IMPL(cast5, cast5, CAST5, 8);
+
+OMNI_SETUP_CIPHER_IMPL(cast5, CAST5, 8);
+
+/* seed implementation */
+
+OMNI_SETUP_KEYING_IMPL(seed, seed, SEED, 8);
+
+OMNI_SETUP_CIPHER_IMPL(seed, SEED, 8);
