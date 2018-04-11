@@ -46,8 +46,7 @@ static int altera_stub_cipher_nids[] = {
     0
 };
 
-#include "e_altera_stub_headers/cipher_init_boilerplate/des.h"
-#include "e_altera_stub_headers/cipher_init_boilerplate/aes.h"
+#include "e_altera_stub_headers/cipher_init_boilerplate/all.h"
 
 
 static int bind_altera_stub(ENGINE *e)
@@ -114,8 +113,7 @@ static int altera_stub_init(ENGINE *e) {
         multiplier = atol(custom_multiplier);
     }
     int status = ENGINE_set_enc_block_size(e, engine_block_size * multiplier);
-    pthread_mutex_init(&altera_stub_aes_mutex, NULL);
-    pthread_mutex_init(&altera_stub_des_mutex, NULL);
+
     return status && (global_env != NULL);
 }
 
@@ -146,27 +144,15 @@ static int altera_stub_ciphers(ENGINE *e,
     }
     /* We are being asked for a specific cipher */
     switch (nid) {
-        case NID_des_ecb:
-            *cipher = altera_stub_des_ecb();
-            break;
-        case NID_aes_128_ecb:
-            *cipher = altera_stub_aes_128_ecb();
-            break;
-        case NID_aes_192_ecb:
-            *cipher = altera_stub_aes_192_ecb();
-            break;
-        case NID_aes_256_ecb:
-            *cipher = altera_stub_aes_256_ecb();
-            break;
-        case NID_aes_128_ctr:
-            *cipher = altera_stub_aes_128_ctr();
-            break;
-        case NID_aes_192_ctr:
-            *cipher = altera_stub_aes_192_ctr();
-            break;
-        case NID_aes_256_ctr:
-            *cipher = altera_stub_aes_256_ctr();
-            break;
+        CASES_AES_NIDS();
+        CASES_DES_NIDS();
+        CASES_CAMELLIA_NIDS();
+        CASES_CAST5_NIDS();
+        //CASES_CLEFIA_NIDS();
+        //CASES_HIGHT_NIDS();
+        //CASES_MISTY1_NIDS();
+        ///CASES_PRESENT_NIDS();
+        CASES_SEED_NIDS();
         default:
             ok = 0;
             *cipher = NULL;
@@ -175,272 +161,16 @@ static int altera_stub_ciphers(ENGINE *e,
     return ok;
 }
 
-
-/* helper functions */
-
-/*
-    If this is the first run, then the fpga won't have any program (or a wrong
-    program) loaded.
-    This function (called directly after the key setup) processes a dummy buffer;
-    This way, the program will be loaded immediately.
-
-    This function exist to facilitate performance measurements.
-*/
-#define DUMMY_BUF_SIZE 4096*3*5
-void pre_program_helper_des(EVP_OPENCL_DES_KEY *data) {
-    uint8_t *dummy_in = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
-    uint8_t *dummy_out = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
-    (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out);
-    free(dummy_out);
-    free(dummy_in);
-}
-void pre_program_helper_aes(EVP_OPENCL_AES_KEY *data) {
-    uint8_t *dummy_in = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
-    uint8_t *dummy_out = (uint8_t*) aligned_alloc(AOCL_ALIGNMENT, sizeof(uint8_t) * DUMMY_BUF_SIZE);
-    (data->stream.cipher) (global_env, dummy_in, DUMMY_BUF_SIZE, &data->k, dummy_out, NULL, NULL);
-    free(dummy_out);
-    free(dummy_in);
-}
-
 /* des implementation */
 
-int altera_stub_des_init_key(EVP_CIPHER_CTX *ctx,
-                             const unsigned char *key,
-                             const unsigned char *iv,
-                             int enc) \
-    GUARD_DECORATOR(altera_stub_des_mutex,
-    {
-        int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
+OMNI_SETUP_KEYING_IMPL(des, des, DES, 8);
 
-        EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-
-        // key schedule
-        opencl_des_set_encrypt_key(
-            key,
-            EVP_CIPHER_CTX_key_length(ctx),
-            &data->k);
-
-        if (mode == EVP_CIPH_ECB_MODE) {
-            data->stream.cipher = enc ? opencl_des_ecb_encrypt : opencl_des_ecb_decrypt;
-            data->must_update_iv = 0;
-        } else if (mode == EVP_CIPH_CTR_MODE) {
-            memcpy(data->k.iv, iv, 8);
-            data->stream.cipher = enc ? opencl_des_ctr_encrypt : opencl_des_ctr_decrypt;
-            data->must_update_iv = 1;
-        }
-
-        else {
-            return 0;
-        }
-
-        pre_program_helper_des(data);
-
-        return 1;
-    })
-
-int altera_stub_des_cipher(EVP_CIPHER_CTX *ctx,
-                           unsigned char *out,
-                           const unsigned char *in,
-                           size_t inl) \
-    GUARD_DECORATOR(altera_stub_des_mutex,
-    {
-        EVP_OPENCL_DES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-        //printf("Block size %ld\n", inl);
-        (data->stream.cipher) (global_env, (uint8_t*) in, inl, &data->k, (uint8_t*) out);
-        if (data->must_update_iv) {
-            opencl_des_update_iv_after_chunk_processed(&data->k, inl);
-        }
-        return inl;
-    })
+OMNI_SETUP_CIPHER_IMPL(des, DES, 8);
 
 /* aes implementation */
 
-int altera_stub_aes_128_init_key(EVP_CIPHER_CTX *ctx,
-                                 const unsigned char *key,
-                                 const unsigned char *iv,
-                                 int enc) \
-    GUARD_DECORATOR(altera_stub_aes_mutex,
-    {
-        int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
+OMNI_SETUP_KEYING_IMPL(aes, aes_128, AES, 16);
+OMNI_SETUP_KEYING_IMPL(aes, aes_192, AES, 16);
+OMNI_SETUP_KEYING_IMPL(aes, aes_256, AES, 16);
 
-        EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-        data->burst_enabled = 0;
-        data->enc = enc;
-
-        // key schedule
-        if (enc || (mode == EVP_CIPH_CTR_MODE)) {
-            opencl_aes_128_set_encrypt_key(
-                key,
-                EVP_CIPHER_CTX_key_length(ctx),
-                &data->k);
-        } else {
-            opencl_aes_128_set_decrypt_key(
-                key,
-                EVP_CIPHER_CTX_key_length(ctx),
-                &data->k);
-        }
-
-        if (mode == EVP_CIPH_ECB_MODE) {
-            data->stream.cipher = enc ? opencl_aes_128_ecb_encrypt : opencl_aes_128_ecb_decrypt;
-            data->must_update_iv = 0;
-        } else if (mode == EVP_CIPH_CTR_MODE) {
-            memcpy(data->k.iv, iv, 16);
-            data->stream.cipher = enc ? opencl_aes_128_ctr_encrypt : opencl_aes_128_ctr_decrypt;
-            data->must_update_iv = 1;
-        }
-
-        else {
-            return 0;
-        }
-
-        pre_program_helper_aes(data);
-
-        return 1;
-    })
-
-int altera_stub_aes_192_init_key(EVP_CIPHER_CTX *ctx,
-                                 const unsigned char *key,
-                                 const unsigned char *iv,
-                                 int enc) \
-    GUARD_DECORATOR(altera_stub_aes_mutex,
-    {
-        int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
-
-        EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-        data->burst_enabled = 0;
-        data->enc = enc;
-
-        // key schedule
-        if (enc || (mode == EVP_CIPH_CTR_MODE)) {
-            opencl_aes_192_set_encrypt_key(
-                key,
-                EVP_CIPHER_CTX_key_length(ctx),
-                &data->k);
-        } else {
-            opencl_aes_192_set_decrypt_key(
-                key,
-                EVP_CIPHER_CTX_key_length(ctx),
-                &data->k);
-        }
-
-        if (mode == EVP_CIPH_ECB_MODE) {
-            data->stream.cipher = enc ? opencl_aes_192_ecb_encrypt : opencl_aes_192_ecb_decrypt;
-            data->must_update_iv = 0;
-        } else if (mode == EVP_CIPH_CTR_MODE) {
-            memcpy(data->k.iv, iv, 16);
-            data->stream.cipher = enc ? opencl_aes_192_ctr_encrypt : opencl_aes_192_ctr_decrypt;
-            data->must_update_iv = 1;
-        }
-
-        else {
-            return 0;
-        }
-
-        pre_program_helper_aes(data);
-
-        return 1;
-    })
-
-int altera_stub_aes_256_init_key(EVP_CIPHER_CTX *ctx,
-                                 const unsigned char *key,
-                                 const unsigned char *iv,
-                                 int enc) \
-    GUARD_DECORATOR(altera_stub_aes_mutex,
-    {
-        int mode = EVP_CIPHER_CTX_mode(ctx) & EVP_CIPH_MODE;
-
-        EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-        data->burst_enabled = 0;
-        data->enc = enc;
-
-        // key schedule
-        if (enc || (mode == EVP_CIPH_CTR_MODE)) {
-            opencl_aes_256_set_encrypt_key(
-                key,
-                EVP_CIPHER_CTX_key_length(ctx),
-                &data->k);
-        } else {
-            opencl_aes_256_set_decrypt_key(
-                key,
-                EVP_CIPHER_CTX_key_length(ctx),
-                &data->k);
-        }
-
-        if (mode == EVP_CIPH_ECB_MODE) {
-            data->stream.cipher = enc ? opencl_aes_256_ecb_encrypt : opencl_aes_256_ecb_decrypt;
-            data->must_update_iv = 0;
-        } else if (mode == EVP_CIPH_CTR_MODE) {
-            memcpy(data->k.iv, iv, 16);
-            data->stream.cipher = enc ? opencl_aes_256_ctr_encrypt : opencl_aes_256_ctr_decrypt;
-            data->must_update_iv = 1;
-        }
-
-        else {
-            return 0;
-        }
-
-        pre_program_helper_aes(data);
-
-        return 1;
-    })
-
-
-struct update_iv_callback_data {
-    EVP_OPENCL_AES_KEY *data;
-    size_t inl;
-};
-
-static void update_iv_callback(void *user_data) {
-    struct update_iv_callback_data *p = (struct update_iv_callback_data*) user_data;
-    opencl_aes_update_iv_after_chunk_processed(&p->data->k, p->inl);
-}
-
-#define SETUP_AES_IV_CALLBACK(inl_size) \
-{ \
-    if (data->must_update_iv) { \
-        callback = &update_iv_callback; \
-        user_data = (struct update_iv_callback_data*) malloc(sizeof(struct update_iv_callback_data)); \
-        user_data->data = data; \
-        user_data->inl = inl_size; \
-    } else { \
-        callback = NULL; \
-        user_data = NULL; \
-    } \
-}
-
-int altera_stub_aes_cipher(EVP_CIPHER_CTX *ctx,
-                           unsigned char *out,
-                           const unsigned char *in,
-                           size_t inl) {
-    EVP_OPENCL_AES_KEY *data = EVP_CIPHER_CTX_get_cipher_data(ctx);
-
-    size_t engine_block_size = OpenCLEnv_get_enc_block_size(global_env);
-    int blocks_inbound = inl / engine_block_size;  // the reminder is handled by the last (non-burst) block
-    int blocks_in_burst = blocks_inbound;
-    if (inl % engine_block_size == 0) blocks_in_burst--;  // no reminder: make a last non-burst block
-
-    size_t reminder = inl - (blocks_in_burst*engine_block_size);
-
-    struct update_iv_callback_data *user_data;
-    aes_callback_t callback;
-
-    OpenCLEnv_perf_begin_event(global_env); // The engine also has a standalone performance counter
-    OpenCLEnv_toggle_burst_mode(global_env, 1);
-    for (int i=0; i<blocks_in_burst; i++) {
-        SETUP_AES_IV_CALLBACK(engine_block_size);
-        (data->stream.cipher) (global_env,
-                               (uint8_t*) (in + engine_block_size*i),
-                               engine_block_size, &data->k,
-                               (uint8_t*) (out + engine_block_size*i),
-                               callback, user_data);
-    }
-    OpenCLEnv_toggle_burst_mode(global_env, 0);
-    SETUP_AES_IV_CALLBACK(reminder);
-    (data->stream.cipher) (global_env,
-                           (uint8_t*) (in + engine_block_size*blocks_in_burst),
-                           reminder, &data->k,
-                           (uint8_t*) (out + engine_block_size*blocks_in_burst),
-                           callback, user_data);
-    OpenCLEnv_perf_begin_event(global_env);  // reset timer again in order to visualize idle times
-    return inl;
-}
+OMNI_SETUP_CIPHER_IMPL(aes, AES, 16);

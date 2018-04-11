@@ -1535,3 +1535,14 @@ id-pkinit 5                     : pkInitKDC             : Signing KDC Response
                             : Poly1305     : poly1305
 # NID for SipHash
                             : SipHash      : siphash
+                            
+
+# CLEFIA
+
+# clefia 1			: CLEFIA-128-ECB		: clefia-128-ecb
+# clefia 2			: CLEFIA-192-ECB		: clefia-192-ecb
+# clefia 3			: CLEFIA-256-ECB		: clefia-256-ecb
+# clefia 4			: CLEFIA-128-CTR		: clefia-128-ctr
+# clefia 5			: CLEFIA-192-CTR		: clefia-192-ctr
+# clefia 6			: CLEFIA-256-CTR		: clefia-256-ctr
+
