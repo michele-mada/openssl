@@ -36,12 +36,24 @@ static int altera_stub_ciphers(ENGINE *, const EVP_CIPHER **,
 
 static int altera_stub_cipher_nids[] = {
     NID_des_ecb,
+
     NID_aes_128_ecb,
     NID_aes_192_ecb,
     NID_aes_256_ecb,
     NID_aes_128_ctr,
     NID_aes_192_ctr,
     NID_aes_256_ctr,
+
+    NID_camellia_128_ecb,
+    NID_camellia_192_ecb,
+    NID_camellia_256_ecb,
+    NID_camellia_128_ctr,
+    NID_camellia_192_ctr,
+    NID_camellia_256_ctr,
+
+    NID_cast5_ecb,
+
+    NID_seed_ecb
 
     0
 };
