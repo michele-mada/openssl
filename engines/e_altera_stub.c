@@ -53,7 +53,7 @@ static int altera_stub_cipher_nids[] = {
 
     NID_cast5_ecb,
 
-    NID_seed_ecb
+    NID_seed_ecb,
 
     0
 };
